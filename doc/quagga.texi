@@ -85,6 +85,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
 * RIPng::
 * OSPFv2::
 * OSPFv3::
+* ISIS::
 * Babel::
 * BGP::
 * Configuring Quagga as a Route Server::
@@ -110,6 +111,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
 @include ripngd.texi
 @include ospfd.texi
 @include ospf6d.texi
+@include isisd.texi
 @include babeld.texi
 @include bgpd.texi
 @include routeserver.texi

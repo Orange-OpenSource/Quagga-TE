@@ -1,0 +1,840 @@
+diff --git a/doc/basic.texi b/doc/basic.texi
+index b3b23ca..a091281 100644
+--- a/doc/basic.texi
++++ b/doc/basic.texi
+@@ -580,7 +580,7 @@ Move up to previous line in the history buffer.
+ @kindex @key{TAB}
+ Use command line completion by typing @key{TAB}.
+ 
+-@item
++@item ?
+ @kindex ?
+ You can use command line help by typing @code{help} at the beginning of
+ the line.  Typing @kbd{?} at any point in the line will show possible
+diff --git a/doc/install.texi b/doc/install.texi
+index e958d84..9c0bfbf 100644
+--- a/doc/install.texi
++++ b/doc/install.texi
+@@ -83,8 +83,17 @@ OSPF-API is enabled if --enable-opaque-lsa is set.
+ @item --disable-ospfclient
+ Disable building of the example OSPF-API client.
+ @item --disable-ospf-te
+-Disable support for OSPF Traffic Engineering Extension (internet-draft) this
++Disable support for OSPF Traffic Engineering Extension (RFC3630) this
+ requires support for Opaque LSAs.
++@item --disable-ospf-ri
++Disable support for OSPF Router Information (RFC4970 & RFC5088) this
++requires support for Opaque LSAs and Traffic Engineering.
++@item --enable-isisd
++Build isisd.
++@item --enable-isis-topology
++Enable IS-IS topology generator.
++@item --enable-isis-te
++Enable Traffic Engineering Extension for ISIS (RFC5305)
+ @item --enable-multipath=@var{ARG}
+ Enable support for Equal Cost Multipath. @var{ARG} is the maximum number
+ of ECMP paths to allow, set to 0 to allow unlimited number of paths.
+diff --git a/doc/isisd.texi b/doc/isisd.texi
+new file mode 100644
+index 0000000..bbc2896
+--- /dev/null
++++ b/doc/isisd.texi
+@@ -0,0 +1,432 @@
++@cindex ISIS
++@node ISIS
++@chapter ISIS
++
++@acronym{ISIS,Intermediate System to Intermediate System} is a routing protocol
++which is described in @cite{ISO10589, RFC1195, RFC5308}.  ISIS is an
++@acronym{IGP,Interior Gateway Protocol}.  Compared with @acronym{RIP},
++@acronym{ISIS} can provide scalable network support and faster
++convergence times like @acronym{OSPF}. ISIS is widely used in large networks such as
++@acronym{ISP,Internet Service Provider} and carrier backbone networks.
++
++@menu
++* Configuring isisd::
++* ISIS router::
++* ISIS Timer::
++* ISIS region::
++* ISIS interface::
++* Showing ISIS information::
++* ISIS Traffic Engineering::
++* Debugging ISIS::
++* ISIS Configuration Examples::
++@end menu
++
++@node Configuring isisd
++@section Configuring isisd
++
++There are no @command{isisd} specific options.  Common options can be
++specified (@pxref{Common Invocation Options}) to @command{isisd}.
++@command{isisd} needs to acquire interface information from
++@command{zebra} in order to function. Therefore @command{zebra} must be
++running before invoking @command{isisd}. Also, if @command{zebra} is
++restarted then @command{isisd} must be too.
++
++Like other daemons, @command{isisd} configuration is done in @acronym{ISIS}
++specific configuration file @file{isisd.conf}.
++
++@node ISIS router
++@section ISIS router
++
++To start ISIS process you have to specify the ISIS router. As of this
++writing, @command{isisd} does not support multiple ISIS processes.
++
++@deffn Command {router isis WORD} {}
++@deffnx Command {no router isis WORD} {}
++@anchor{router isis WORD}Enable or disable the ISIS process by specifying the ISIS domain with 'WORD'.
++@command{isisd} does not yet support multiple ISIS processes but you must specify
++the name of ISIS process. The ISIS process name 'WORD' is then used for interface
++(see command @ref{ip router isis WORD}).
++@end deffn
++
++@deffn {ISIS Command} {net XX.XXXX. ... .XXX.XX} {}
++@deffnx {ISIS Command} {no net XX.XXXX. ... .XXX.XX} {}
++Set/Unset network entity title (NET) provided in ISO format.
++@end deffn
++
++@deffn {ISIS Command} {hostname dynamic} {}
++@deffnx {ISIS Command} {no hostname dynamic} {}
++Enable support for dynamic hostname.
++@end deffn
++
++@deffn {ISIS Command} {area-password [clear | md5] <password>} {}
++@deffnx {ISIS Command} {domain-password [clear | md5] <password>} {}
++@deffnx {ISIS Command} {no area-password} {}
++@deffnx {ISIS Command} {no domain-password} {}
++Configure the authentication password for an area, respectively a domain,
++as clear text or md5 one.
++@end deffn
++
++@deffn {ISIS Command} {log-adjacency-changes} {}
++@deffnx {ISIS Command} {no log-adjacency-changes} {}
++Log changes in adjacency state.
++@end deffn
++
++@deffn {ISIS Command} {metric-style [narrow | transition | wide]} {}
++@deffnx {ISIS Command} {no metric-style} {}
++@anchor{metric-style}Set old-style (ISO 10589) or new-style packet formats:
++  - narrow      Use old style of TLVs with narrow metric
++  - transition  Send and accept both styles of TLVs during transition
++  - wide        Use new style of TLVs to carry wider metric
++@end deffn
++
++@deffn {ISIS Command} {set-overload-bit} {}
++@deffnx {ISIS Command} {no set-overload-bit} {}
++Set overload bit to avoid any transit traffic.
++@end deffn
++
++@node ISIS Timer
++@section ISIS Timer
++
++@deffn {ISIS Command} {lsp-gen-interval <1-120>} {}
++@deffnx {ISIS Command} {lsp-gen-interval [level-1 | level-2] <1-120>} {}
++@deffnx {ISIS Command} {no lsp-gen-interval} {}
++@deffnx {ISIS Command} {no lsp-gen-interval [level-1 | level-2]} {}
++Set minimum interval in seconds between regenerating same LSP,
++globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {ISIS Command} {lsp-refresh-interval <1-65235>} {}
++@deffnx {ISIS Command} {lsp-refresh-interval [level-1 | level-2] <1-65235>} {}
++@deffnx {ISIS Command} {no lsp-refresh-interval} {}
++@deffnx {ISIS Command} {no lsp-refresh-interval [level-1 | level-2]} {}
++Set LSP refresh interval in seconds, globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {ISIS Command} {lsp-refresh-interval <1-65235>} {}
++@deffnx {ISIS Command} {lsp-refresh-interval [level-1 | level-2] <1-65235>} {}
++@deffnx {ISIS Command} {no lsp-refresh-interval} {}
++@deffnx {ISIS Command} {no lsp-refresh-interval [level-1 | level-2]} {}
++Set LSP refresh interval in seconds, globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {ISIS Command} {max-lsp-lifetime <360-65535>} {}
++@deffnx {ISIS Command} {max-lsp-lifetime [level-1 | level-2] <360-65535>} {}
++@deffnx {ISIS Command} {no max-lsp-lifetime} {}
++@deffnx {ISIS Command} {no max-lsp-lifetime [level-1 | level-2]} {}
++Set LSP maximum LSP lifetime in seconds, globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {ISIS Command} {spf-interval <1-120>} {}
++@deffnx {ISIS Command} {spf-interval [level-1 | level-2] <1-120>} {}
++@deffnx {ISIS Command} {no spf-interval} {}
++@deffnx {ISIS Command} {no spf-interval [level-1 | level-2]} {}
++Set minimum interval between consecutive SPF calculations in seconds.
++@end deffn
++
++@node ISIS region
++@section ISIS region
++
++@deffn {ISIS Command} {is-type [level-1 | level-1-2 | level-2-only]} {}
++@deffnx {ISIS Command} {no is-type} {}
++Define the ISIS router behavior:
++ - level-1       Act as a station router only
++ - level-1-2     Act as both a station router and an area router
++ - level-2-only  Act as an area router only
++@end deffn
++
++@node ISIS interface
++@section ISIS interface
++
++@deffn {Interface Command} {ip router isis WORD} {}
++@deffnx {Interface Command} {no ip router isis WORD} {}
++@anchor{ip router isis WORD}Activate ISIS adjacency on this interface. Note that the name
++of ISIS instance must be the same as the one used to configure the ISIS process
++(see command @ref{router isis WORD}).
++@end deffn
++
++@deffn {Interface Command} {isis circuit-type [level-1 | level-1-2 | level-2]} {}
++@deffnx {Interface Command} {no isis circuit-type} {}
++Configure circuit type for interface:
++  - level-1       Level-1 only adjacencies are formed
++  - level-1-2     Level-1-2 adjacencies are formed
++  - level-2-only  Level-2 only adjacencies are formed
++@end deffn
++
++@deffn {Interface Command} {isis csnp-interval <1-600>} {}
++@deffnx {Interface Command} {isis csnp-interval <1-600> [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis csnp-interval} {}
++@deffnx {Interface Command} {no isis csnp-interval [level-1 | level-2]} {}
++Set CSNP interval in seconds globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {Interface Command} {isis hello padding} {}
++Add padding to IS-IS hello packets.
++@end deffn
++
++@deffn {Interface Command} {isis hello-interval <1-600>} {}
++@deffnx {Interface Command} {isis hello-interval <1-600> [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis hello-interval} {}
++@deffnx {Interface Command} {no isis hello-interval [level-1 | level-2]} {}
++Set Hello interval in seconds globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {Interface Command} {isis hello-multiplier <2-100>} {}
++@deffnx {Interface Command} {isis hello-multiplier <2-100> [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis hello-multiplier} {}
++@deffnx {Interface Command} {no isis hello-multiplier [level-1 | level-2]} {}
++Set multiplier for Hello holding time globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@deffn {Interface Command} {isis metric [<0-255> | <0-16777215>]} {}
++@deffnx {Interface Command} {isis metric [<0-255> | <0-16777215>] [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis metric} {}
++@deffnx {Interface Command} {no isis metric [level-1 | level-2]} {}
++Set default metric value globally, for an area (level-1) or a domain (level-2).
++Max value depend if metric support narrow or wide value (see command @ref{metric-style}).
++@end deffn
++
++@deffn {Interface Command} {isis network point-to-point} {}
++@deffnx {Interface Command} {no isis network point-to-point} {}
++Set network type to 'Point-to-Point' (broadcast by default).
++@end deffn
++
++@deffn {Interface Command} {isis passive} {}
++@deffnx {Interface Command} {no isis passive} {}
++Configure the passive mode for this interface.
++@end deffn
++
++@deffn {Interface Command} {isis password [clear | md5] <password>} {}
++@deffnx {Interface Command} {no isis password} {}
++Configure the authentication password (clear or encoded text) for the interface.
++@end deffn
++
++@deffn {Interface Command} {isis priority <0-127>} {}
++@deffnx {Interface Command} {isis priority <0-127> [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis priority} {}
++@deffnx {Interface Command} {no isis priority [level-1 | level-2]} {}
++Set priority for Designated Router election, globally, for the area (level-1)
++or the domain (level-2).
++@end deffn
++
++@deffn {Interface Command} {isis psnp-interval <1-120>} {}
++@deffnx {Interface Command} {isis psnp-interval <1-120> [level-1 | level-2]} {}
++@deffnx {Interface Command} {no isis psnp-interval} {}
++@deffnx {Interface Command} {no isis psnp-interval [level-1 | level-2]} {}
++Set PSNP interval in seconds globally, for an area (level-1) or a domain (level-2).
++@end deffn
++
++@node Showing ISIS information
++@section Showing ISIS information
++
++@deffn {Command} {show isis summary} {}
++Show summary information about ISIS.
++@end deffn
++
++@deffn {Command} {show isis hostname} {}
++Show information about ISIS node.
++@end deffn
++
++@deffn {Command} {show isis interface} {}
++@deffnx {Command} {show isis interface detail} {}
++@deffnx {Command} {show isis interface <interface name>} {}
++Show state and configuration of ISIS specified interface, or all
++interfaces if no interface is given with or without details.
++@end deffn
++
++@deffn {Command} {show isis neighbor} {}
++@deffnx {Command} {show isis neighbor <System Id>} {}
++@deffnx {Command} {show isis neighbor detail} {}
++Show state and information of ISIS specified neighbor, or all
++neighbors if no system id is given with or without details.
++@end deffn
++
++@deffn {Command} {show isis database} {}
++@deffnx {Command} {show isis database [detail]} {}
++@deffnx {Command} {show isis database <LSP id> [detail]} {}
++@deffnx {Command} {show isis database detail <LSP id>} {}
++Show the ISIS database globally, for a specific LSP id without or with details.
++@end deffn
++
++@deffn {Command} {show isis topology} {}
++@deffnx {Command} {show isis topology [level-1|level-2]} {}
++Show topology IS-IS paths to Intermediate Systems, globally,
++in area (level-1) or domain (level-2).
++@end deffn
++
++@deffn {Command} {show ip route isis} {}
++Show the ISIS routing table, as determined by the most recent SPF calculation.
++@end deffn
++
++@node ISIS Traffic Engineering
++@section Traffic Engineering
++
++@deffn {ISIS Command} {mpls-te on} {}
++@deffnx {ISIS Command} {no mpls-te} {}
++Enable Traffic Engineering LSP flooding.
++@end deffn
++
++@deffn {ISIS Command} {mpls-te router-address <A.B.C.D>} {}
++@deffnx {ISIS Command} {no mpls-te router-address} {}
++Configure stable IP address for MPLS-TE.
++@end deffn
++
++@deffn {Command} {show isis mpls-te interface} {}
++@deffnx {Command} {show isis mpls-te interface @var{interface}} {}
++Show MPLS Traffic Engineering parameters for all or specified interface.
++@end deffn
++
++@deffn {Command} {show isis mpls-te router} {}
++Show Traffic Engineering router parameters.
++@end deffn
++
++@node Debugging ISIS
++@section Debugging ISIS
++
++@deffn {Command} {debug isis adj-packets} {}
++@deffnx {Command} {no debug isis adj-packets} {}
++IS-IS Adjacency related packets.
++@end deffn
++
++@deffn {Command} {debug isis checksum-errors} {}
++@deffnx {Command} {no debug isis checksum-errors} {}
++IS-IS LSP checksum errors.
++@end deffn
++
++@deffn {Command} {debug isis events} {}
++@deffnx {Command} {no debug isis events} {}
++IS-IS Events.
++@end deffn
++
++@deffn {Command} {debug isis local-updates} {}
++@deffnx {Command} {no debug isis local-updates} {}
++IS-IS local update packets.
++@end deffn
++
++@deffn {Command} {debug isis packet-dump} {}
++@deffnx {Command} {no debug isis packet-dump} {}
++IS-IS packet dump.
++@end deffn
++
++@deffn {Command} {debug isis protocol-errors} {}
++@deffnx {Command} {no debug isis protocol-errors} {}
++IS-IS LSP protocol errors.
++@end deffn
++
++@deffn {Command} {debug isis route-events} {}
++@deffnx {Command} {no debug isis route-events} {}
++IS-IS Route related events.
++@end deffn
++
++@deffn {Command} {debug isis snp-packets} {}
++@deffnx {Command} {no debug isis snp-packets} {}
++IS-IS CSNP/PSNP packets.
++@end deffn
++
++@deffn {Command} {debug isis spf-events} {}
++@deffnx {Command} {debug isis spf-statistics} {}
++@deffnx {Command} {debug isis spf-triggers} {}
++@deffnx {Command} {no debug isis spf-events} {}
++@deffnx {Command} {no debug isis spf-statistics} {}
++@deffnx {Command} {no debug isis spf-triggers} {}
++IS-IS Shortest Path First Events, Timing and Statistic Data
++and triggering events.
++@end deffn
++
++@deffn {Command} {debug isis update-packets} {}
++@deffnx {Command} {no debug isis update-packets} {}
++Update related packets.
++@end deffn
++
++@deffn {Command} {show debugging isis} {}
++Print which ISIS debug level is activate.
++@end deffn
++
++@node ISIS Configuration Examples
++@section ISIS Configuration Examples
++A simple example, with MD5 authentication enabled:
++
++@example
++@group
++!
++interface eth0
++ ip router isis FOO
++ isis network point-to-point
++ isis circuit-type level-2-only
++!
++router isis FOO
++net 47.0023.0000.0000.0000.0000.0000.0000.1900.0004.00
++ metric-style wide
++ is-type level-2-only
++@end group
++@end example
++
++
++A Traffic Engineering configuration, with Inter-ASv2 support.
++
++ - First, the 'zebra.conf' part:
++
++@example
++@group
++hostname HOSTNAME
++password PASSWORD
++log file /var/log/zebra.log
++!
++interface eth0
++ ip address 10.2.2.2/24
++ mpls-te on
++ mpls-te link metric 10
++ mpls-te link max-bw 1.25e+06
++ mpls-te link max-rsv-bw 1.25e+06
++ mpls-te link unrsv-bw 0 1.25e+06
++ mpls-te link unrsv-bw 1 1.25e+06
++ mpls-te link unrsv-bw 2 1.25e+06
++ mpls-te link unrsv-bw 3 1.25e+06
++ mpls-te link unrsv-bw 4 1.25e+06
++ mpls-te link unrsv-bw 5 1.25e+06
++ mpls-te link unrsv-bw 6 1.25e+06
++ mpls-te link unrsv-bw 7 1.25e+06
++ mpls-te link rsc-clsclr 0xab
++!
++interface eth1
++ ip address 10.1.1.1/24
++ mpls-te on
++ mpls-te link metric 10
++ mpls-te link max-bw 1.25e+06
++ mpls-te link max-rsv-bw 1.25e+06
++ mpls-te link unrsv-bw 0 1.25e+06
++ mpls-te link unrsv-bw 1 1.25e+06
++ mpls-te link unrsv-bw 2 1.25e+06
++ mpls-te link unrsv-bw 3 1.25e+06
++ mpls-te link unrsv-bw 4 1.25e+06
++ mpls-te link unrsv-bw 5 1.25e+06
++ mpls-te link unrsv-bw 6 1.25e+06
++ mpls-te link unrsv-bw 7 1.25e+06
++ mpls-te link rsc-clsclr 0xab
++ mpls-te neighbor 10.1.1.2 as 65000
++@end group
++@end example
++
++ - Then the 'isisd.conf' itself:
++
++@example
++@group
++hostname HOSTNAME
++password PASSWORD
++log file /var/log/isisd.log
++!
++!
++interface eth0
++ ip router isis FOO
++!
++interface eth1
++ ip router isis FOO
++!
++!
++router isis FOO
++ isis net 47.0023.0000.0000.0000.0000.0000.0000.1900.0004.00
++  mpls-te on
++  mpls-te router-address 10.1.1.1
++!
++line vty
++@end group
++@end example
+diff --git a/doc/main.texi b/doc/main.texi
+index a6bf0d1..f39c7ac 100644
+--- a/doc/main.texi
++++ b/doc/main.texi
+@@ -85,6 +85,49 @@ only Linux and Solaris, and only where network interface drivers support reporti
+ link-state via the IFF_RUNNING flag.
+ @end deffn
+ 
++@subsection Traffic Engineering Parameters
++
++@deffn {Interface Command} {mpls-te on} {}
++@deffnx {Interface Command} {no mpls-te} {}
++Enable Traffic Engineering on this interface. MPLS-TE must be enable at the OSPF (@ref{OSPF Traffic Engineering})
++or ISIS (@ref{ISIS Traffic Engineering}) router level prior to this.
++@end deffn
++
++@deffn {Interface Command} {mpls-te link metric <0-4294967295>} {}
++@deffnx {Interface Command} {mpls-te link max-bw @var{bandwidth}} {}
++@deffnx {Interface Command} {mpls-te link max-rsv-bw @var{bandwidth}} {}
++@deffnx {Interface Command} {mpls-te link unrsv-bw <0-7> @var{bandwidth}} {}
++@deffnx {Interface Command} {mpls-te link admin-grp @var{bandwidth}} {}
++These commands specifies the Traffic Engineering parameters of the interface in conformity to RFC3630 (OSPF)
++or RFC5305 (ISIS).
++There are respectively the TE Metric (different from the OSPF or ISIS metric), Maximum Bandwidth (interface speed
++by default), Maximum Reservable Bandwidth, Unreserved Bandwidth for each 0-7 priority and Admin Group (ISIS) or
++Resource Class/Color (OSPF).
++
++Note that @var{bandwidth} are specified in IEEE floating point format and express in Bytes/second.
++@end deffn
++
++@deffn {Interface Command} {mpls-te link delay <0-16777215> [min <0-16777215> | max <0-16777215>]} {}
++@deffnx {Interface Command} {mpls-te link delay-variation <0-16777215>} {}
++@deffnx {Interface Command} {mpls-te link packet-loss @var{percentage}} {}
++@deffnx {Interface Command} {mpls-te link res-bw @var{bandwidth}} {}
++@deffnx {Interface Command} {mpls-te link ava-bw @var{bandwidth}} {}
++@deffnx {Interface Command} {mpls-te link use-bw @var{bandwidth}} {}
++These command specifies additionnal Traffic Engineering parameters of the interface in conformity to
++draft-ietf-ospf-te-metrics-extension-05.txt and draft-ietf-isis-te-metrics-extension-03.txt. There are
++respectively the delay, jitter, loss, available bandwidth, reservable bandwidth and utilized bandwidth. 
++
++Note that @var{bandwidth} are specified in IEEE floating point format and express in Bytes/second.
++Delays and delay variation are express in micro-second (µs). Loss is specified in @var{percentage} ranging
++from 0 to 50.331642% by step of 0.000003.
++@end deffn
++
++@deffn {Interface Command} {mpls-te neighbor <A.B.C.D> as <0-65535>} {}
++@deffnx {Interface Command} {no mpls-te neighbor} {}
++Specifies the remote ASBR IP address and Autonomous System (AS) number for InterASv2 link in OSPF (RFC5392).
++Note that this option is not yet supported for ISIS (RFC5316).
++@end deffn
++
+ @node Static Route Commands
+ @section Static Route Commands
+ 
+diff --git a/doc/mpls/ChangeLog.opaque.txt b/doc/mpls/ChangeLog.opaque.txt
+index 68ddf4c..afcfaa3 100644
+--- a/doc/mpls/ChangeLog.opaque.txt
++++ b/doc/mpls/ChangeLog.opaque.txt
+@@ -1,4 +1,17 @@
+ ----- * ----- * ----- * ----- * ----- * ----- * ----- * ----- * ----- * -----
++Changes 2013.07.01
++
++1. Feature enhancements
++
++  1.1 Update ospf_te.[c,h] in conformance to RFC3630 and clean the code.
++      Add new directive to enable MPLS-TE per interface instead of globally
++
++  1.2 Add support for RFC4970 "Router Information" and RFC5088 "PCE
++      Capabilities announcement".
++
++  1.3 Incorporate the mpls documentation into the main stream doc.
++
++----- * ----- * ----- * ----- * ----- * ----- * ----- * ----- * ----- * -----
+ Changes 2001.12.03
+ 
+ 1. Bug fixes
+diff --git a/doc/mpls/ospfd.conf b/doc/mpls/ospfd.conf
+index 6be11f9..2b15fa4 100644
+--- a/doc/mpls/ospfd.conf
++++ b/doc/mpls/ospfd.conf
+@@ -17,6 +17,7 @@ debug ospf packet all detail
+ interface fxp0
+  ip ospf hello-interval 60
+  ip ospf dead-interval 240
++ mpls-te on
+  mpls-te link metric 999
+  mpls-te link max-bw 1.25e+06
+  mpls-te link max-rsv-bw 1.25e+06
+diff --git a/doc/ospfd.texi b/doc/ospfd.texi
+index 856a2ba..7854d43 100644
+--- a/doc/ospfd.texi
++++ b/doc/ospfd.texi
+@@ -1,3 +1,4 @@
++
+ @cindex OSPFv2
+ @node OSPFv2
+ @chapter OSPFv2
+@@ -17,6 +18,9 @@ networks.
+ * OSPF interface::              
+ * Redistribute routes to OSPF::  
+ * Showing OSPF information::    
++* Opaque LSA::
++* OSPF Traffic Engineering::
++* Router Information::
+ * Debugging OSPF::              
+ * OSPF Configuration Examples::
+ @end menu
+@@ -608,35 +612,137 @@ interfaces if no interface is given.
+ Show the OSPF routing table, as determined by the most recent SPF calculation.
+ @end deffn
+ 
++@node Opaque LSA
++@section Opaque LSA
++
++@deffn {OSPF Command} {ospf opaque-lsa} {}
++@deffnx {OSPF Command} {capability opaque} {}
++@deffnx {OSPF Command} {no ospf opaque-lsa} {} 
++@deffnx {OSPF Command} {no capability opaque} {}
++@command{ospfd} support Opaque LSA (RFC2370) as fondment for MPLS Traffic Engineering LSA. Prior to used MPLS TE, opaque-lsa must be enable in the configuration file. Alternate command could be "mpls-te on" (@ref{OSPF Traffic Engineering}).
++@end deffn
++
++@deffn {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external)} {}
++@deffnx {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external) @var{link-state-id}} {}
++@deffnx {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external) @var{link-state-id} adv-router @var{adv-router}} {}
++@deffnx {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external) adv-router @var{adv-router}} {}
++@deffnx {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external) @var{link-state-id} self-originate} {}
++@deffnx {Command} {show ip ospf database (opaque-link|opaque-area|opaque-external) self-originate} {}
++Show Opaque LSA from the database.
++@end deffn
++
++@node OSPF Traffic Engineering
++@section Traffic Engineering
++
++@deffn {OSPF Command} {mpls-te on} {}
++@deffnx {OSPF Command} {no mpls-te} {}
++Enable Traffic Engineering LSA flooding.
++@end deffn
++
++@deffn {OSPF Command} {mpls-te router-address <A.B.C.D>} {}
++@deffnx {OSPF Command} {no mpls-te} {}
++Configure stable IP address for MPLS-TE. This IP address is then advertise in Opaque LSA Type-10 TLV=1 (TE)
++option 1 (Router-Address).
++@end deffn
++
++@deffn {OSPF Command} {mpls-te inter-as area <area-id>|as} {}
++@deffnx {OSPF Command} {no mpls-te inter-as} {}
++Enable RFC5392 suuport - Inter-AS TE v2 - to flood Traffic Engineering parameters of Inter-AS link.
++2 modes are supported: AREA and AS; LSA are flood in AREA <area-id> with Opaque Type-10, 
++respectively in AS with Opaque Type-11. In all case, Opaque-LSA TLV=6.
++@end deffn
++
++@deffn {Command} {show ip ospf mpls-te interface} {}
++@deffnx {Command} {show ip ospf mpls-te interface @var{interface}} {}
++Show MPLS Traffic Engineering parameters for all or specified interface.
++@end deffn
++
++@deffn {Command} {show ip ospf mpls-te router} {}
++Show Traffic Engineering router parameters.
++@end deffn
++
++@node Router Information
++@section Router Information
++
++@deffn {OSPF Command} {router-info [as | area <A.B.C.D>]} {}
++@deffnx {OSPF Command} {no router-info} {}
++Enable Router Information (RFC4970) LSA advertisement with AS scope (default) or Area scope flooding
++when area is specified.
++@end deffn
++
++@deffn {OSPF Command} {pce address <A.B.C.D>} {}
++@deffnx {OSPF Command} {no pce address} {}
++@deffnx {OSPF Command} {pce domain as <0-65535>} {}
++@deffnx {OSPF Command} {no pce domain as <0-65535>} {}
++@deffnx {OSPF Command} {pce neighbor as <0-65535>} {}
++@deffnx {OSPF Command} {no pce neighbor as <0-65535>} {}
++@deffnx {OSPF Command} {pce flag BITPATTERN} {}
++@deffnx {OSPF Command} {no pce flag} {}
++@deffnx {OSPF Command} {pce scope BITPATTERN} {}
++@deffnx {OSPF Command} {no pce scope} {}
++The commands are conform to RFC 5088 and allow OSPF router announce Path Compuatation Elemenent (PCE) capabilities
++through the Router Information (RI) LSA. Router Information must be enable prior to this. The command set/unset
++respectively the PCE IP adress, Autonomous System (AS) numbers of controlled domains, neighbor ASs, flag and scope.
++For flag and scope, please refer to RFC5088 for the BITPATTERN recognition. Multiple 'pce neighbor' command could
++be specified in order to specify all PCE neighbours.
++@end deffn
++
++@deffn {Command} {show ip ospf router-info} {}
++Show Router Capabilities flag.
++@end deffn
++@deffn {Command} {show ip ospf router-info pce} {}
++Show Router Capabilities PCE parameters.
++@end deffn
++
+ @node Debugging OSPF
+ @section Debugging OSPF
+ 
+ @deffn {Command} {debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) [detail]} {}
+ @deffnx {Command} {no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) [detail]} {}
++Dump Packet for debugging
+ @end deffn
+ 
+ @deffn {Command} {debug ospf ism} {}
+ @deffnx {Command} {debug ospf ism (status|events|timers)} {}
+ @deffnx {Command} {no debug ospf ism} {}
+ @deffnx {Command} {no debug ospf ism (status|events|timers)} {}
++Show debug information of Interface State Machine
+ @end deffn
+ 
+ @deffn {Command} {debug ospf nsm} {}
+ @deffnx {Command} {debug ospf nsm (status|events|timers)} {}
+ @deffnx {Command} {no debug ospf nsm} {}
+ @deffnx {Command} {no debug ospf nsm (status|events|timers)} {}
++Show debug information of Network State Machine
++@end deffn
++
++@deffn {Command} {debug ospf event} {}
++@deffnx {Command} {no debug ospf event} {}
++Show debug information of OSPF event
++@end deffn
++
++@deffn {Command} {debug ospf nssa} {}
++@deffnx {Command} {no debug ospf nssa} {}
++Show debug information about Not So Stub Area
+ @end deffn
+ 
+ @deffn {Command} {debug ospf lsa} {}
+ @deffnx {Command} {debug ospf lsa (generate|flooding|refresh)} {}
+ @deffnx {Command} {no debug ospf lsa} {}
+ @deffnx {Command} {no debug ospf lsa (generate|flooding|refresh)} {}
++Show debug detail of Link State messages
++@end deffn
++
++@deffn {Command} {debug ospf te} {}
++@deffnx {Command} {no debug ospf te} {}
++Show debug information about Traffic Engineering LSA
+ @end deffn
+ 
+ @deffn {Command} {debug ospf zebra} {}
+ @deffnx {Command} {debug ospf zebra (interface|redistribute)} {}
+ @deffnx {Command} {no debug ospf zebra} {}
+ @deffnx {Command} {no debug ospf zebra (interface|redistribute)} {}
++Show debug information of ZEBRA API
+ @end deffn
+ 
+ @deffn {Command} {show debugging ospf} {}
+@@ -694,3 +800,100 @@ router ospf
+ !
+ @end group
+ @end example
++
++A Traffic Engineering configuration, with Inter-ASv2 support.
++
++ - First, the 'zebra.conf' part:
++
++@example
++@group
++hostname HOSTNAME
++password PASSWORD
++log file /var/log/zebra.log
++!
++interface eth0
++ ip address 198.168.1.1/24
++ mpls-te on
++ mpls-te link metric 10
++ mpls-te link max-bw 1.25e+06
++ mpls-te link max-rsv-bw 1.25e+06
++ mpls-te link unrsv-bw 0 1.25e+06
++ mpls-te link unrsv-bw 1 1.25e+06
++ mpls-te link unrsv-bw 2 1.25e+06
++ mpls-te link unrsv-bw 3 1.25e+06
++ mpls-te link unrsv-bw 4 1.25e+06
++ mpls-te link unrsv-bw 5 1.25e+06
++ mpls-te link unrsv-bw 6 1.25e+06
++ mpls-te link unrsv-bw 7 1.25e+06
++ mpls-te link rsc-clsclr 0xab
++!
++interface eth1
++ ip address 192.168.2.1/24
++ mpls-te on
++ mpls-te link metric 10
++ mpls-te link max-bw 1.25e+06
++ mpls-te link max-rsv-bw 1.25e+06
++ mpls-te link unrsv-bw 0 1.25e+06
++ mpls-te link unrsv-bw 1 1.25e+06
++ mpls-te link unrsv-bw 2 1.25e+06
++ mpls-te link unrsv-bw 3 1.25e+06
++ mpls-te link unrsv-bw 4 1.25e+06
++ mpls-te link unrsv-bw 5 1.25e+06
++ mpls-te link unrsv-bw 6 1.25e+06
++ mpls-te link unrsv-bw 7 1.25e+06
++ mpls-te link rsc-clsclr 0xab
++ mpls-te neighbor 192.168.2.2 as 65000
++@end group
++@end example
++
++ - Then the 'ospfd.conf' itself:
++
++@example
++@group
++hostname HOSTNAME
++password PASSWORD
++log file /var/log/ospfd.log
++!
++!
++interface eth0
++ ip ospf hello-interval 60
++ ip ospf dead-interval 240
++!
++interface eth1
++ ip ospf hello-interval 60
++ ip ospf dead-interval 240
++!
++!
++router ospf
++ ospf router-id 192.168.1.1
++ network 192.168.0.0/16 area 1
++ ospf opaque-lsa
++  mpls-te
++  mpls-te router-address 192.168.1.1
++  mpls-te inter-as area 1
++!
++line vty
++@end group
++@end example
++
++A router information example with PCE advsertisement:
++
++@example
++@group
++!
++router ospf
++ ospf router-id 192.168.1.1
++ network 192.168.0.0/16 area 1
++ capability opaque
++  mpls-te
++  mpls-te router-address 192.168.1.1
++ router-info area 0.0.0.1
++  pce address 192.168.1.1
++  pce flag 0x80
++  pce domain as 65400
++  pce neighbor as 65500
++  pce neighbor as 65200
++  pce scope 0x80
++!
++@end group
++@end example
+diff --git a/doc/quagga.texi b/doc/quagga.texi
+index b4105ac..7499126 100644
+--- a/doc/quagga.texi
++++ b/doc/quagga.texi
+@@ -86,6 +86,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
+ * RIPng::
+ * OSPFv2::
+ * OSPFv3::
++* ISIS::
+ * Babel::
+ * BGP::
+ * Configuring Quagga as a Route Server::
+@@ -111,6 +112,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
+ @include ripngd.texi
+ @include ospfd.texi
+ @include ospf6d.texi
++@include isisd.texi
+ @include babeld.texi
+ @include bgpd.texi
+ @include routeserver.texi

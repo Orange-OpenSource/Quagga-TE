@@ -220,6 +220,9 @@ ospf_opaque_type_name (u_char opaque_type)
     case OPAQUE_TYPE_GRACE_LSA:
       name = "Grace-LSA";
       break;
+    case OPAQUE_TYPE_INTER_AS_LSA:
+      name = "Inter-AS TE-v2 LSA";
+      break;
     default:
       if (OPAQUE_TYPE_RANGE_UNASSIGNED (opaque_type))
         name = "Unassigned";
@@ -1992,6 +1995,7 @@ ospf_opaque_lsa_refresh_schedule (struct ospf_lsa *lsa0)
   struct opaque_info_per_type *oipt;
   struct opaque_info_per_id *oipi;
   struct ospf_lsa *lsa;
+  struct ospf *top;
   int delay;
 
   if ((oipt = lookup_opaque_info_by_type (lsa0)) == NULL
@@ -2023,7 +2027,10 @@ ospf_opaque_lsa_refresh_schedule (struct ospf_lsa *lsa0)
       ospf_ls_retransmit_delete_nbr_area (lsa->area, lsa);
       break;
     case OSPF_OPAQUE_AS_LSA:
-      ospf_ls_retransmit_delete_nbr_as (lsa0->area->ospf, lsa);
+      top = ospf_lookup ();
+      if ((lsa0->area != NULL) && (lsa0->area->ospf != NULL))
+        top = lsa0->area->ospf;
+      ospf_ls_retransmit_delete_nbr_as (top, lsa);
       break;
     default:
       zlog_warn ("ospf_opaque_lsa_refresh_schedule: Unexpected LSA-type(%u)", lsa->data->type);
@@ -2068,6 +2075,9 @@ ospf_opaque_lsa_flush_schedule (struct ospf_lsa *lsa0)
   struct opaque_info_per_type *oipt;
   struct opaque_info_per_id *oipi;
   struct ospf_lsa *lsa;
+  struct ospf *top;
+
+  top = ospf_lookup ();
 
   if ((oipt = lookup_opaque_info_by_type (lsa0)) == NULL
   ||  (oipi = lookup_opaque_info_by_id (oipt, lsa0)) == NULL)
@@ -2091,7 +2101,9 @@ ospf_opaque_lsa_flush_schedule (struct ospf_lsa *lsa0)
       ospf_ls_retransmit_delete_nbr_area (lsa->area, lsa);
       break;
     case OSPF_OPAQUE_AS_LSA:
-      ospf_ls_retransmit_delete_nbr_as (lsa0->area->ospf, lsa);
+      if ((lsa0->area != NULL) && (lsa0->area->ospf != NULL))
+        top = lsa0->area->ospf;
+      ospf_ls_retransmit_delete_nbr_as (top, lsa);
       break;
     default:
       zlog_warn ("ospf_opaque_lsa_flush_schedule: Unexpected LSA-type(%u)", lsa->data->type);
@@ -2115,7 +2127,7 @@ ospf_opaque_lsa_flush_schedule (struct ospf_lsa *lsa0)
     zlog_debug ("Schedule Type-%u Opaque-LSA to FLUSH: [opaque-type=%u, opaque-id=%x]", lsa->data->type, GET_OPAQUE_TYPE (ntohl (lsa->data->id.s_addr)), GET_OPAQUE_ID (ntohl (lsa->data->id.s_addr)));
 
   /* This lsa will be flushed and removed eventually. */
-  ospf_lsa_flush (lsa0->area->ospf, lsa);
+  ospf_lsa_flush (top, lsa);
 
 out:
   return;

@@ -1,26 +1,21 @@
 # Quagga-TE
 
-Traffic Engineering extension for Quagga
+Traffic Engineering extension for Quagga 0.99.24.1
 
 ## Why this project?
 This repo is a clone of official quagga repository at [http://git.savannah.gnu.org/r/quagga.git](http://git.savannah.gnu.org/r/quagga.git) on which Traffic Engineering patches haves been applied. It aims at providing up to date TE support for Quagga OSPF as well as first TE support for ISIS. The full patches are too huge to be submitted on the quagga mailing list, thus, smaller one's have been proposed on the mailing list.
 But the objective is to include it into the main stream.
 
-In addition to this master branch, Quagga version 0.99.23.1 could be patched.
+NOTE: This branch concern the patch against the official release 0.99.24.1. See branch TE-master for the latest release
 
 ## How to install in 30 seconds?
 Four solutions are available
  * Clone this repository
- * Apply the quagga-head-te.diff patch on top of a fresh quagga source from git:
+ * Apply the quagga-head-te.diff patch on the latest 0.99.24.1 release:
 ```
-    cd quagga-0.99.23.1
+    tar xvf quagga-0.99.24.1.tar.gz
+    cd quagga-0.99.24.1
     patch -p1 < TE-patches/quagga-head-te.diff
-```
- * Apply the quagga-head-te.diff patch on the latest 0.99.23.1 release:
-```
-    tar xvf quagga-0.99.23.tar.gz
-    cd quagga-0.99.23
-    patch -p1 < TE-patches/quagga-0.99.23te.diff
 ```
  * Apply individual patches on top of fresh quagga source or release:
 ```
@@ -47,6 +42,7 @@ OSPF
  * RFC4970 Router Information
  * RFC5088 Path Computation Element (PCE) annoucement
  * RFC5392 Inter-ASv2
+ * RFC7471 Traffic Engineering Metrics Extension
 
 ISIS
  * RFC5305 Base Traffic Engineering

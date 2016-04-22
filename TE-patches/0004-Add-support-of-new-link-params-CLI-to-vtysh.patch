@@ -1,0 +1,130 @@
+From 9834b922ca2603dd7fad65dcac15fca5810e72d6 Mon Sep 17 00:00:00 2001
+From: Olivier Dugeon <olivier.dugeon@orange.com>
+Date: Tue, 19 Apr 2016 18:33:42 +0200
+Subject: [PATCH 4/9] Add support of new link-params CLI to vtysh
+
+In vtysh_config.c/vtysh_config_parse_line(), it is not possible to continue
+to use the ordered version for adding line i.e. config_add_line_uniq() to print
+Interface CLI commands as it completely break the new LINK_PARAMS_NODE.
+
+Signed-off-by: Olivier Dugeon <olivier.dugeon@orange.com>
+---
+ vtysh/extract.pl.in  |  1 +
+ vtysh/vtysh.c        | 25 +++++++++++++++++++++++++
+ vtysh/vtysh_config.c |  3 +--
+ 3 files changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/vtysh/extract.pl.in b/vtysh/extract.pl.in
+index ca869b6..786493a 100755
+--- a/vtysh/extract.pl.in
++++ b/vtysh/extract.pl.in
+@@ -32,6 +32,7 @@ EOF
+ 
+ $ignore{'"interface IFNAME"'} = "ignore";
+ $ignore{'"interface IFNAME " "vrf <0-65535>"'} = "ignore";
++$ignore{'"link-params"'} = "ignore";
+ $ignore{'"ip vrf NAME"'} = "ignore";
+ $ignore{'"router rip"'} = "ignore";
+ $ignore{'"router ripng"'} = "ignore";
+diff --git a/vtysh/vtysh.c b/vtysh/vtysh.c
+index 63b596a..0a504bc 100644
+--- a/vtysh/vtysh.c
++++ b/vtysh/vtysh.c
+@@ -764,6 +764,12 @@ static struct cmd_node keychain_key_node =
+   "%s(config-keychain-key)# "
+ };
+ 
++struct cmd_node link_params_node =
++{
++  LINK_PARAMS_NODE,
++  "%s(config-link-params)# ",
++};
++
+ /* Defined in lib/vty.c */
+ extern struct cmd_node vty_node;
+ 
+@@ -1131,6 +1137,9 @@ vtysh_exit (struct vty *vty)
+     case KEYCHAIN_KEY_NODE:
+       vty->node = KEYCHAIN_NODE;
+       break;
++    case LINK_PARAMS_NODE:
++      vty->node = INTERFACE_NODE;
++      break;
+     default:
+       break;
+     }
+@@ -1404,6 +1413,17 @@ DEFUN (vtysh_show_work_queues,
+   return ret;
+ }
+ 
++DEFUNSH (VTYSH_ZEBRA,
++         vtysh_link_params,
++         vtysh_link_params_cmd,
++         "link-params",
++         LINK_PARAMS_STR
++         )
++{
++  vty->node = LINK_PARAMS_NODE;
++  return CMD_SUCCESS;
++}
++
+ /* Memory */
+ DEFUN (vtysh_show_memory,
+        vtysh_show_memory_cmd,
+@@ -2354,6 +2374,7 @@ vtysh_init_vty (void)
+   install_node (&bgp_node, NULL);
+   install_node (&rip_node, NULL);
+   install_node (&interface_node, NULL);
++  install_node (&link_params_node, NULL);
+   install_node (&rmap_node, NULL);
+   install_node (&zebra_node, NULL);
+   install_node (&bgp_vpnv4_node, NULL);
+@@ -2383,6 +2404,7 @@ vtysh_init_vty (void)
+   vtysh_install_default (BGP_NODE);
+   vtysh_install_default (RIP_NODE);
+   vtysh_install_default (INTERFACE_NODE);
++  vtysh_install_default (LINK_PARAMS_NODE);
+   vtysh_install_default (RMAP_NODE);
+   vtysh_install_default (ZEBRA_NODE);
+   vtysh_install_default (BGP_VPNV4_NODE);
+@@ -2477,6 +2499,8 @@ vtysh_init_vty (void)
+   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
+   install_element (INTERFACE_NODE, &vtysh_end_all_cmd);
+   install_element (INTERFACE_NODE, &vtysh_exit_interface_cmd);
++  install_element (LINK_PARAMS_NODE, &vtysh_end_all_cmd);
++  install_element (LINK_PARAMS_NODE, &vtysh_exit_interface_cmd);
+   install_element (INTERFACE_NODE, &vtysh_quit_interface_cmd);
+   install_element (CONFIG_NODE, &router_rip_cmd);
+ #ifdef HAVE_IPV6
+@@ -2519,6 +2543,7 @@ vtysh_init_vty (void)
+   install_element (CONFIG_NODE, &vtysh_no_interface_cmd);
+   install_element (CONFIG_NODE, &vtysh_interface_vrf_cmd);
+   install_element (CONFIG_NODE, &vtysh_no_interface_vrf_cmd);
++  install_element (INTERFACE_NODE, &vtysh_link_params_cmd);
+   install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
+   install_element (ENABLE_NODE, &vtysh_show_running_config_daemon_cmd);
+   install_element (ENABLE_NODE, &vtysh_copy_runningconfig_startupconfig_cmd);
+diff --git a/vtysh/vtysh_config.c b/vtysh/vtysh_config.c
+index a069164..c80c42a 100644
+--- a/vtysh/vtysh_config.c
++++ b/vtysh/vtysh_config.c
+@@ -166,7 +166,7 @@ vtysh_config_parse_line (const char *line)
+       /* Store line to current configuration. */
+       if (config)
+ 	{
+-	  if (strncmp (line, " address-family vpnv4",
++          if (strncmp (line, " address-family vpnv4",
+ 	      strlen (" address-family vpnv4")) == 0)
+ 	    config = config_get (BGP_VPNV4_NODE, line);
+ 	  else if (strncmp (line, " address-family vpn6",
+@@ -185,7 +185,6 @@ vtysh_config_parse_line (const char *line)
+ 		   strlen (" address-family ipv6")) == 0)
+ 	    config = config_get (BGP_IPV6_NODE, line);
+ 	  else if (config->index == RMAP_NODE ||
+-	           config->index == INTERFACE_NODE ||
+ 		   config->index == VTY_NODE)
+ 	    config_add_line_uniq (config->line, line);
+ 	  else
+-- 
+1.9.1
+

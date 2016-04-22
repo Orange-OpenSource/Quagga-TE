@@ -1,0 +1,191 @@
+From b240bab772b041b2c6b35028d4df6cbed9a5dca0 Mon Sep 17 00:00:00 2001
+From: Olivier Dugeon <olivier.dugeon@orange.com>
+Date: Tue, 19 Apr 2016 16:31:08 +0200
+Subject: [PATCH 2/9] Add support for IEEE 754 format
+
+* lib/stream.[c,h]: Add stream_get{f,d} and stream_put{f,d}) demux and muxers to
+  safely convert between big-endian IEEE-754 single and double binary
+  format, as used in IETF RFCs, and C99.  Implementation depends on host
+  using __STDC_IEC_559__, which should be everything we care about.  Should
+  correctly error out otherwise.
+* lib/network.[c,h]: Add ntohf and htonf converter
+* lib/memtypes.c: Add new memeory type for Traffic Engineering support
+
+Signed-off-by: Olivier Dugeon <olivier.dugeon@orange.com>
+---
+ lib/memtypes.c |  4 ++++
+ lib/network.c  | 22 +++++++++++++++++++++
+ lib/network.h  |  3 +++
+ lib/stream.c   | 60 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/stream.h   |  6 ++++++
+ 5 files changed, 95 insertions(+)
+
+diff --git a/lib/memtypes.c b/lib/memtypes.c
+index 6df1448..d6b8b8d 100644
+--- a/lib/memtypes.c
++++ b/lib/memtypes.c
+@@ -72,6 +72,7 @@ struct memory_list memory_list_lib[] =
+   { MTYPE_VRF,			"VRF"				},
+   { MTYPE_VRF_NAME,		"VRF name"			},
+   { MTYPE_VRF_BITMAP,		"VRF bit-map"			},
++  { MTYPE_IF_LINK_PARAMS,	"Informational Link Parameters" },
+   { -1, NULL },
+ };
+ 
+@@ -214,6 +215,8 @@ struct memory_list memory_list_ospf[] =
+   { MTYPE_OSPF_IF_INFO,       "OSPF if info"			},
+   { MTYPE_OSPF_IF_PARAMS,     "OSPF if params"			},
+   { MTYPE_OSPF_MESSAGE,		"OSPF message"			},
++  { MTYPE_OSPF_MPLS_TE,       "OSPF MPLS parameters"            },
++  { MTYPE_OSPF_PCE_PARAMS,    "OSPF PCE parameters"             },
+   { -1, NULL },
+ };
+ 
+@@ -255,6 +258,7 @@ struct memory_list memory_list_isis[] =
+   { MTYPE_ISIS_NEXTHOP6,      "ISIS nexthop6"			},
+   { MTYPE_ISIS_DICT,          "ISIS dictionary"			},
+   { MTYPE_ISIS_DICT_NODE,     "ISIS dictionary node"		},
++  { MTYPE_ISIS_MPLS_TE,       "ISIS MPLS_TE parameters"         },
+   { -1, NULL },
+ };
+ 
+diff --git a/lib/network.c b/lib/network.c
+index 3373983..b81d5f8 100644
+--- a/lib/network.c
++++ b/lib/network.c
+@@ -93,3 +93,25 @@ set_nonblocking(int fd)
+     }
+   return 0;
+ }
++
++float
++htonf (float host)
++{
++#ifdef __STDC_IEC_559__
++  u_int32_t lu1, lu2;
++  float convert;
++  
++  memcpy (&lu1, &host, sizeof (u_int32_t));
++  lu2 = htonl (lu1);
++  memcpy (&convert, &lu2, sizeof (u_int32_t));
++  return convert;
++#else
++#error "Please supply htonf implementation for this platform"
++#endif 
++}
++
++float
++ntohf (float net)
++{
++  return htonf (net);
++}
+diff --git a/lib/network.h b/lib/network.h
+index 4d9c228..0fcb575 100644
+--- a/lib/network.h
++++ b/lib/network.h
+@@ -37,4 +37,7 @@ extern int set_nonblocking(int fd);
+ #define ERRNO_IO_RETRY(EN) \
+ 	(((EN) == EAGAIN) || ((EN) == EWOULDBLOCK) || ((EN) == EINTR))
+ 
++extern float htonf (float);
++extern float ntohf (float);
++
+ #endif /* _ZEBRA_NETWORK_H */
+diff --git a/lib/stream.c b/lib/stream.c
+index ca1a40f..d85446d 100644
+--- a/lib/stream.c
++++ b/lib/stream.c
+@@ -493,6 +493,36 @@ stream_get_ipv4 (struct stream *s)
+   return l;
+ }
+ 
++float
++stream_getf (struct stream *s)
++{
++#ifdef __STDC_IEC_559__
++  union {
++    float r;
++    uint32_t d;
++  } u;
++  u.d = stream_getl (s);
++  return u.r;
++#else
++#error "Please supply stream_getf implementation for this platform"
++#endif
++}
++
++double
++stream_getd (struct stream *s)
++{
++#ifdef __STDC_IEC_559__
++  union {
++    double r;
++    uint64_t d;
++  } u;
++  u.d = stream_getq (s);
++  return u.r;
++#else
++#error "Please supply stream_getd implementation for this platform"
++#endif
++}
++
+ /* Copy to source to stream.
+  *
+  * XXX: This uses CHECK_SIZE and hence has funny semantics -> Size will wrap
+@@ -602,6 +632,36 @@ stream_putq (struct stream *s, uint64_t q)
+ }
+ 
+ int
++stream_putf (struct stream *s, float f)
++{
++#ifdef __STDC_IEC_559__
++  union {
++    float i;
++    uint32_t o;
++  } u;
++  u.i = f;
++  return stream_putl (s, u.o);
++#else
++#error "Please supply stream_putf implementation for this platform"
++#endif
++}
++
++int
++stream_putd (struct stream *s, double d)
++{
++#ifdef __STDC_IEC_559__
++  union {
++    double i;
++    uint64_t o;
++  } u;
++  u.i = d;
++  return stream_putq (s, u.o);
++#else
++#error "Please supply stream_putd implementation for this platform"
++#endif
++}
++
++int
+ stream_putc_at (struct stream *s, size_t putp, u_char c)
+ {
+   STREAM_VERIFY_SANE(s);
+diff --git a/lib/stream.h b/lib/stream.h
+index 1fc382d..06b0ee1 100644
+--- a/lib/stream.h
++++ b/lib/stream.h
+@@ -186,6 +186,12 @@ extern uint64_t stream_getq (struct stream *);
+ extern uint64_t stream_getq_from (struct stream *, size_t);
+ extern u_int32_t stream_get_ipv4 (struct stream *);
+ 
++/* IEEE-754 floats */
++extern float stream_getf (struct stream *);
++extern double stream_getd (struct stream *);
++extern int stream_putf (struct stream *, float);
++extern int stream_putd (struct stream *, double);
++
+ #undef stream_read
+ #undef stream_write
+ 
+-- 
+1.9.1
+

@@ -39,94 +39,95 @@
         </div>
 
         <h1>
-<a id="quagga-te" class="anchor" href="#quagga-te" aria-hidden="true"><span class="octicon octicon-link"></span></a>Quagga-TE</h1>
+<a id="quagga-te" class="anchor" href="#quagga-te" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Quagga-TE</h1>
 
 <p>Traffic Engineering extension for Quagga</p>
 
 <h2>
-<a id="why-this-project" class="anchor" href="#why-this-project" aria-hidden="true"><span class="octicon octicon-link"></span></a>Why this project?</h2>
+<a id="why-this-project" class="anchor" href="#why-this-project" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Why this project?</h2>
 
 <p>This repo is a clone of official quagga repository at <a href="http://git.savannah.gnu.org/r/quagga.git">http://git.savannah.gnu.org/r/quagga.git</a> on which Traffic Engineering patches haves been applied. It aims at providing up to date TE support for Quagga OSPF as well as first TE support for ISIS. The full patches are too huge to be submitted on the quagga mailing list, thus, smaller one's have been proposed on the mailing list.
 But the objective is to include it into the main stream.</p>
 
-<p>In addition to this master branch, Quagga version 0.99.23.1 could be patched.</p>
+<p>In addition to this master branch, Quagga version 0.99.24.1 could be patched (See TE-0.99.24.1 branch).</p>
 
 <h2>
-<a id="how-to-install-in-30-seconds" class="anchor" href="#how-to-install-in-30-seconds" aria-hidden="true"><span class="octicon octicon-link"></span></a>How to install in 30 seconds?</h2>
+<a id="how-to-install-in-30-seconds" class="anchor" href="#how-to-install-in-30-seconds" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How to install in 30 seconds?</h2>
 
 <p>Four solutions are available</p>
 
 <ul>
-<li>Clone the Traffic-Engineering branch of this repository</li>
+<li>Clone this repository</li>
+<li>Apply the am patches on top of a fresh quagga source from git:</li>
 </ul>
 
-<pre><code>    git clone -b Traffic-Engineering https://github.com/Orange-OpenSource/Quagga-TE
+<pre><code>    cd quagga-master
+    git am TE-patches/*
 </code></pre>
-
-<ul>
-<li>Apply the quagga-head-te.diff patch on top of a fresh quagga source from git:</li>
-</ul>
-
-<pre><code>    git clone http://git.savannah.gnu.org/r/quagga.git quagga
-    cd quagga
-    patch -p1 &lt; TE-patches/quagga-head-te.diff
-</code></pre>
-
-<ul>
-<li>Apply the quagga-head-te.diff patch on the latest 0.99.23.1 release:</li>
-</ul>
-
-<pre><code>    tar xvf quagga-0.99.23.tar.gz
-    cd quagga-0.99.23
-    patch -p1 &lt; TE-patches/quagga-0.99.23te.diff
-</code></pre>
-
-<ul>
-<li>Apply individual patches on top of fresh quagga source or release:</li>
-</ul>
-
-<pre><code>    cd quagga
-    patch -p1 &lt; TE-patches/buggy_unlock.diff
-    patch -p1 &lt; TE-patches/zebra.diff
-    patch -p1 &lt; TE-patches/ospf-te.diff
-    patch -p1 &lt; TE-patches/ospf-ri.diff
-    patch -p1 &lt; TE-patches/isis-te.diff
-    patch -p1 &lt; TE-patches/doc.diff
-</code></pre>
-
-<p>Note that ospf-te.diff, ospf-ri.diff and isis-te.diff must be applied in this order. </p>
 
 <h2>
-<a id="how-to-compile-it" class="anchor" href="#how-to-compile-it" aria-hidden="true"><span class="octicon octicon-link"></span></a>How to compile it?</h2>
+<a id="how-to-compile-it" class="anchor" href="#how-to-compile-it" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How to compile it?</h2>
 
-<p>New options have been added to OSPF TE quagga configure option:</p>
+<p>Traffic Engineering is enable by default (no more HAVE_OSPF_TE / HAVE_ISIS_TE .. configuration flag).
+Just perform:</p>
 
-<pre><code>--enable-ospf-ri to compile quagga with OSPF Router Info support (RFC4970 &amp; 5088)
---enable-isis-te to compile quagga with ISIS TE support (RFC5305)
+<pre><code>    cd quagga-master
+    autoreconf -rif
+    ./configure
+    make
+    sudo make install
 </code></pre>
 
-<p>To use them, run <code>autoreconf -f</code> before using configure script.</p>
-
 <h2>
-<a id="new-rfcs-supported" class="anchor" href="#new-rfcs-supported" aria-hidden="true"><span class="octicon octicon-link"></span></a>New RFCs supported</h2>
+<a id="new-rfcs-supported" class="anchor" href="#new-rfcs-supported" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>New RFCs supported</h2>
 
 <p>OSPF</p>
 
 <ul>
 <li>RFC3630 (instead of original draft) for base Traffic Engineering</li>
+<li>RFC4203 Extensions to GMPLS (partial)</li>
 <li>RFC4970 Router Information</li>
 <li>RFC5088 Path Computation Element (PCE) annoucement</li>
 <li>RFC5392 Inter-ASv2</li>
+<li>RFC7471 Traffic Engineering Metrics Extension</li>
 </ul>
 
 <p>ISIS</p>
 
 <ul>
 <li>RFC5305 Base Traffic Engineering</li>
+<li>RFC5307 Extensions to GMPLS (partial)</li>
+<li>draft-ietf-isis-te-metric-extensions-11</li>
 </ul>
 
 <h2>
-<a id="bug-correction" class="anchor" href="#bug-correction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Bug Correction</h2>
+<a id="changelog-from-099241-release" class="anchor" href="#changelog-from-099241-release" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Changelog from 0.99.24.1 Release</h2>
+
+<ul>
+<li>Update to latest draft draft-ietf-isis-te-metric-extensions-11</li>
+<li>Interface CLI have been change. From 'mpls-te link' to 'link-params' node.r
+Thus, with this release, you must update your configuration file 'zebra.conf'.</li>
+</ul>
+
+<pre><code>Interface eth1
+ ip address 10.10.10.1/30
+ link-params
+  enable
+  max-bw 1.25e+07
+  max-rsv-bw 6.75e+06
+  unrsv-bw 0 1.25e+06
+  unrsv-bw 1 1.25e+06
+  unrsv-bw 2 1.25e+06
+  unrsv-bw 3 1.25e+06
+  unrsv-bw 4 1.25e+06
+  unrsv-bw 5 1.25e+06
+  unrsv-bw 6 1.25e+06
+  unrsv-bw 7 1.25e+06
+!
+</code></pre>
+
+<h2>
+<a id="bug-correction" class="anchor" href="#bug-correction" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Bug Correction</h2>
 
 <p>An old bug in ospfd/ospf_opaque.c blocks opaque LSA flooding when the Quagga router is restarted or when an interface goes down then up in less than 3600 seconds (i.e. LSA MAX AGE). In such situation, the neighbour router have acquired TE LSA from the Quagga router and keep them in its Link State Data Base (LSDB). When the Quagga router restart or interface goes up, the neighbour router send back the original TE LSA. Quagga detects these self generated opaque LSA and signal to its neighbour router with LS ACK + LSA age = MAX AGE that the LSA must not be kept during the LSDB synchronisation phase.</p>
 
@@ -137,7 +138,7 @@ But the objective is to include it into the main stream.</p>
 <p>The patch has been tested with Cisco and Juniper no any problem have been observed. Wireshark captures have seen nothing strange. Comparisons of Quagga behaviour with Cisco and Juniper behaviours in the same conditions with Wireshark show similar captures.</p>
 
 <h2>
-<a id="disclaimer" class="anchor" href="#disclaimer" aria-hidden="true"><span class="octicon octicon-link"></span></a>Disclaimer</h2>
+<a id="disclaimer" class="anchor" href="#disclaimer" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Disclaimer</h2>
 
 <p>As some implemented RFCs are covered by IPR <a href="http://tools.ietf.org/ipr">see http://tools.ietf.org/ipr</a> in
 particular for RFC5392 <a href="http://tools.ietf.org/ipr/1332">see http://tools.ietf.org/ipr/1332</a>,
@@ -147,30 +148,30 @@ provision of the source code and the contribution of the same code to the Quagga
 So that, usage of this code must be conform to the different IPR disclosure.</p>
 
 <h2>
-<a id="implementation-details" class="anchor" href="#implementation-details" aria-hidden="true"><span class="octicon octicon-link"></span></a>Implementation details</h2>
+<a id="implementation-details" class="anchor" href="#implementation-details" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Implementation details</h2>
 
 <h3>
-<a id="te-link-parameters" class="anchor" href="#te-link-parameters" aria-hidden="true"><span class="octicon octicon-link"></span></a>TE Link parameters</h3>
+<a id="te-link-parameters" class="anchor" href="#te-link-parameters" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>TE Link parameters</h3>
 
 <p>Management of TE link parameters previously supported in <em>ospfd/ospf_te.c</em> have been move into <em>lib/interface.c</em> to avoid duplication of configuration when both OSPF-TE and ISIS-TE are activated. ZEBRA API has been enhance to propagate TE link parameters changes between the Zebra layer and OSPF / ISIS layer.</p>
 
 <h3>
-<a id="ospf-te" class="anchor" href="#ospf-te" aria-hidden="true"><span class="octicon octicon-link"></span></a>OSPF-TE</h3>
+<a id="ospf-te" class="anchor" href="#ospf-te" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>OSPF-TE</h3>
 
 <p>Router Information is supported in <em>ospfd/ospf_ri.[c,h]</em> and <em>ospfd/ospf_te.[c,h]</em> have been updated</p>
 
 <h3>
-<a id="isis-te" class="anchor" href="#isis-te" aria-hidden="true"><span class="octicon octicon-link"></span></a>ISIS-TE</h3>
+<a id="isis-te" class="anchor" href="#isis-te" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>ISIS-TE</h3>
 
 <p>ISIS TE is mostly supported through <em>isisd/isis_te.[c,h]</em></p>
 
 <h3>
-<a id="docummentation" class="anchor" href="#docummentation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Docummentation</h3>
+<a id="docummentation" class="anchor" href="#docummentation" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Docummentation</h3>
 
 <p>The documentation has been updated accordingly in <em>doc/main.texi</em>, <em>doc/ospfd.texi</em> and <em>doc/isisd.texi</em>. So, all Traffic Engineering documentation is avaible in quagga.pdf once compiled.</p>
 
 <h2>
-<a id="maturity-and-tests" class="anchor" href="#maturity-and-tests" aria-hidden="true"><span class="octicon octicon-link"></span></a>Maturity and Tests</h2>
+<a id="maturity-and-tests" class="anchor" href="#maturity-and-tests" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Maturity and Tests</h2>
 
 <p>Of course, like the initial OSPF-TE support, this new version must be considered as experimental and not for production.
 Netherveless, the code have been tested against Cisco, Juniper and ALU commercial routers without any problems after running Quagga several weeks. ISIS has been tested only against Cisco. Juniper tests are planning. The testbed consist of Quagga routers and commercial routers. CLI are used on the different routers to perform test as well as wireshark to verify message conformity.
@@ -185,7 +186,7 @@ Tests consist to:</p>
 </ul>
 
 <h2>
-<a id="roadmap" class="anchor" href="#roadmap" aria-hidden="true"><span class="octicon octicon-link"></span></a>Roadmap</h2>
+<a id="roadmap" class="anchor" href="#roadmap" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Roadmap</h2>
 
 <p>Support for complementary RFCs are on going work. Stay tune for announcement. Here it is a first list of these RFCs
 OSPF</p>

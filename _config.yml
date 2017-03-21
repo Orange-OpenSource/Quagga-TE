@@ -1,0 +1,8 @@
+title: Quagga-te
+description: Quagga with Traffic Engineering support in Traffic-Engineering branch
+google_analytics: 
+show_downloads: true
+theme: jekyll-theme-midnight
+
+gems:
+  - jekyll-mentions

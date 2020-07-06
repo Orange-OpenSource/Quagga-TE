@@ -33,7 +33,7 @@ struct community
   /* Communities value.  */
   u_int32_t *val;
 
-  /* String of community attribute.  This sring is used by vty output
+  /* String of community attribute.  This string is used by vty output
      and expanded community-list for regular expression match.  */
   char *str;
 };

@@ -385,6 +385,9 @@ bgp_sync_init (struct peer *peer)
   afi_t afi;
   safi_t safi;
   struct bgp_synchronize *sync;
+  /*
+   * TODO:Need to be optimized because of BGP LS
+   */
 
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -404,6 +407,9 @@ bgp_sync_delete (struct peer *peer)
 {
   afi_t afi;
   safi_t safi;
+  /*
+   * TODO:Need to be optimized because of BGP LS
+   */
 
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)

@@ -2340,7 +2340,7 @@ bgp_update_main (struct peer *peer, struct prefix *p, struct attr *attr,
 	}
 
       /* Nexthop reachability check. */
-      if ((afi == AFI_IP || afi == AFI_IP6)
+      if ((afi == AFI_IP || afi == AFI_IP6 || afi == AFI_LINK_STATE)
 	  && safi == SAFI_UNICAST 
 	  && (peer->sort == BGP_PEER_IBGP
               || peer->sort == BGP_PEER_CONFED
@@ -2550,7 +2550,7 @@ bgp_default_originate (struct peer *peer, afi_t afi, safi_t safi, int withdraw)
   struct bgp_info *ri;
   int ret = RMAP_DENYMATCH;
   
-  if (!(afi == AFI_IP || afi == AFI_IP6))
+  if (!(afi == AFI_IP || afi == AFI_IP6 || afi == AFI_LINK_STATE))
     return;
   
   bgp = peer->bgp;
@@ -2708,6 +2708,9 @@ bgp_announce_route_all (struct peer *peer)
 {
   afi_t afi;
   safi_t safi;
+  /**
+   * TODO:need to be optimized because of BGP LS
+   */
   
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -4057,6 +4060,9 @@ bgp_static_delete (struct bgp *bgp)
   struct bgp_node *rm;
   struct bgp_table *table;
   struct bgp_static *bgp_static;
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
 
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)

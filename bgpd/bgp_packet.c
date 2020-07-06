@@ -32,6 +32,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "linklist.h"
 #include "plist.h"
 #include "filter.h"
+#include "config.h" /*Ajout par MTD le 16/04/2015*/
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
@@ -156,6 +157,7 @@ bgp_update_packet (struct peer *peer, afi_t afi, safi_t safi)
   size_t mpattrlen_pos = 0;
   size_t mpattr_pos = 0;
 
+
   s = peer->work;
   stream_reset (s);
   snlri = peer->scratch;
@@ -235,7 +237,7 @@ bgp_update_packet (struct peer *peer, afi_t afi, safi_t safi)
 	  if (stream_empty(snlri))
 	    mpattrlen_pos = bgp_packet_mpattr_start(snlri, afi, safi,
 						    adv->baa->attr);
-	  bgp_packet_mpattr_prefix(snlri, afi, safi, &rn->p, prd, tag);
+	  bgp_packet_mpattr_prefix(snlri, afi, safi, &rn->p, prd, tag,adv->baa->attr);
 	}
       if (BGP_DEBUG (update, UPDATE_OUT))
         {
@@ -333,6 +335,7 @@ bgp_update_packet_eor (struct peer *peer, afi_t afi, safi_t safi)
     2-octet withdrawn route length (=0) | 2-octet attrlen |
      mp_unreach attr type | attr len | afi | safi | withdrawn prefixes
 */
+
 static struct stream *
 bgp_withdraw_packet (struct peer *peer, afi_t afi, safi_t safi)
 {
@@ -388,7 +391,7 @@ bgp_withdraw_packet (struct peer *peer, afi_t afi, safi_t safi)
 	      mplen_pos = bgp_packet_mpunreach_start(s, afi, safi);
 	    }
 
-	  bgp_packet_mpunreach_prefix(s, &rn->p, afi, safi, prd, NULL);
+	  bgp_packet_mpunreach_prefix(s, &rn->p, afi, safi, prd, NULL,adv->baa->attr);
 	}
 
       if (BGP_DEBUG (update, UPDATE_OUT))
@@ -447,7 +450,7 @@ bgp_default_update_send (struct peer *peer, struct attr *attr,
   if (DISABLE_BGP_ANNOUNCE)
     return;
 
-  if (afi == AFI_IP)
+  if (afi == AFI_IP || afi == AFI_LINK_STATE )
     str2prefix ("0.0.0.0/0", &p);
   else 
     str2prefix ("::/0", &p);
@@ -510,11 +513,13 @@ bgp_default_withdraw_send (struct peer *peer, afi_t afi, safi_t safi)
   bgp_size_t total_attr_len;
   size_t mp_start = 0;
   size_t mplen_pos = 0;
+  struct bgp_advertise *adv;
+  adv = BGP_ADV_FIFO_HEAD (&peer->sync[afi][safi]->withdraw);
 
   if (DISABLE_BGP_ANNOUNCE)
     return;
 
-  if (afi == AFI_IP)
+  if (afi == AFI_IP || afi == AFI_LINK_STATE)
     str2prefix ("0.0.0.0/0", &p);
   else 
     str2prefix ("::/0", &p);
@@ -558,7 +563,7 @@ bgp_default_withdraw_send (struct peer *peer, afi_t afi, safi_t safi)
       stream_putw (s, 0);
       mp_start = stream_get_endp (s);
       mplen_pos = bgp_packet_mpunreach_start(s, afi, safi);
-      bgp_packet_mpunreach_prefix(s, &p, afi, safi, NULL, NULL);
+      bgp_packet_mpunreach_prefix(s, &p, afi, safi, NULL, NULL,adv->baa->attr);
 
       /* Set the mp_unreach attr's length */
       bgp_packet_mpunreach_end(s, mplen_pos);
@@ -589,6 +594,10 @@ bgp_write_packet (struct peer *peer)
   if (s)
     return s;
 
+  /*
+   * TODO: need to be optimized because of BGP LS
+   */
+
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
@@ -600,7 +609,9 @@ bgp_write_packet (struct peer *peer)
 	      return s;
 	  }
       }
-    
+    /*
+     * TODO: need to be optimized because of BGP LS
+     */
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
@@ -656,12 +667,17 @@ bgp_write_proceed (struct peer *peer)
 
   if (stream_fifo_head (peer->obuf))
     return 1;
+       /*
+       * TODO: need to be optimized because of BGP LS
+       */
 
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       if (FIFO_HEAD (&peer->sync[afi][safi]->withdraw))
 	return 1;
-
+       /*
+       * TODO: need to be optimized because of BGP LS
+       */
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       if ((adv = BGP_ADV_FIFO_HEAD (&peer->sync[afi][safi]->update)) != NULL)
@@ -1359,8 +1375,8 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
 	}
     }
 
-  /* When collision is detected and this peer is closed.  Retrun
-     immidiately. */
+  /* When collision is detected and this peer is closed.  Return
+     immediately. */
   ret = bgp_collision_detect (peer, remote_id);
   if (ret < 0)
     return ret;
@@ -1576,6 +1592,8 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       peer->afc_nego[AFI_IP][SAFI_MULTICAST] = peer->afc[AFI_IP][SAFI_MULTICAST];
       peer->afc_nego[AFI_IP6][SAFI_UNICAST] = peer->afc[AFI_IP6][SAFI_UNICAST];
       peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = peer->afc[AFI_IP6][SAFI_MULTICAST];
+      peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE] = peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE];
+      peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE_VPN] = peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE_VPN];
     }
 
   /* Get sockname. */
@@ -1921,6 +1939,38 @@ bgp_notify_receive (struct peer *peer, bgp_size_t size)
       peer->notify.data = NULL;
       peer->notify.length = 0;
     }
+  if (peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE])
+        {
+          if (withdraw.length)
+    	bgp_nlri_parse (peer, NULL, &withdraw);
+
+          if (update.length)
+    	  bgp_nlri_parse (peer, NLRI_ATTR_ARG, &update);
+
+          if (mp_update.length
+    	  && mp_update.safi == SAFI_LINK_STATE)
+    	bgp_nlri_parse (peer, NLRI_ATTR_ARG, &mp_update);
+
+          if (mp_withdraw.length
+    	  && mp_withdraw.afi == AFI_LINK_STATE
+    	  && mp_withdraw.safi == SAFI_LINK_STATE)
+    	bgp_nlri_parse (peer, NULL, &mp_withdraw);
+
+          if (! attribute_len && ! withdraw_len)
+    	{
+    	  /* End-of-RIB received */
+    	  SET_FLAG (peer->af_sflags[AFI_LINK_STATE][SAFI_LINK_STATE],
+    		    PEER_STATUS_EOR_RECEIVED);
+
+    	  /* NSF delete stale route */
+    	  if (peer->nsf[AFI_LINK_STATE][SAFI_LINK_STATE])
+    	    bgp_clear_stale_route (peer, AFI_LINK_STATE, SAFI_LINK_STATE);
+
+    	  if (BGP_DEBUG (normal, NORMAL))
+    	    zlog (peer->log, LOG_DEBUG, "rcvd End-of-RIB for Link-State from %s",
+    		  peer->host);
+    	}
+        }
 
   bgp_notify.code = stream_getc (peer->ibuf);
   bgp_notify.subcode = stream_getc (peer->ibuf);
@@ -2039,9 +2089,9 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
 	       peer->host, afi, safi);
 
   /* Check AFI and SAFI. */
-  if ((afi != AFI_IP && afi != AFI_IP6)
+  if ((afi != AFI_IP && afi != AFI_IP6 &&  afi != AFI_LINK_STATE)
       || (safi != SAFI_UNICAST && safi != SAFI_MULTICAST
-	  && safi != SAFI_MPLS_LABELED_VPN))
+	  && safi != SAFI_MPLS_LABELED_VPN && safi != SAFI_LINK_STATE && safi != SAFI_LINK_STATE_VPN))
     {
       if (BGP_DEBUG (normal, NORMAL))
 	{

@@ -483,7 +483,8 @@ extern const char *zserv_command_string (unsigned int command);
 typedef enum {
   AFI_IP  = 1,
   AFI_IP6 = 2,
-#define AFI_MAX 3
+  AFI_LINK_STATE = 16388,   /* BGP-LS RFC 7752 */
+#define AFI_MAX 16389
 } afi_t;
 
 /* Subsequent Address Family Identifier. */
@@ -492,7 +493,8 @@ typedef enum {
 #define SAFI_RESERVED_3           3
 #define SAFI_MPLS_VPN             4
 #define SAFI_ENCAP		  7 /* per IANA */
-#define SAFI_MAX                  8
+#define SAFI_LINK_STATE          71 /* BGP-LS RFC 7752 */
+#define SAFI_MAX                 72
 
 /* Default Administrative Distance of each protocol. */
 #define ZEBRA_KERNEL_DISTANCE_DEFAULT      0

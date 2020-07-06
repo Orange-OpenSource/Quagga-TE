@@ -535,7 +535,9 @@ if_get_ipv6_local (struct interface *ifp, struct in6_addr *addr)
   return 0;
 }
 
-static int
+//static
+//extern
+int
 if_get_ipv4_address (struct interface *ifp, struct in_addr *addr)
 {
   struct listnode *cnode;

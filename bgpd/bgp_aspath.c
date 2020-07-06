@@ -1527,6 +1527,7 @@ aspath_reconcile_as4 ( struct aspath *aspath, struct aspath *as4path)
 	                      " across 2/4 ASN boundary somewhere, broken..");
 	        hops = seg->length;
 	      }
+        break;
 	  case AS_SEQUENCE:
 	    cpasns = MIN(seg->length, hops);
 	    hops -= seg->length;

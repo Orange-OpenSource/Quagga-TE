@@ -1,18 +1,14 @@
 /* BGP open message handling
    Copyright (C) 1998, 1999 Kunihiro Ishiguro
-
 This file is part of GNU Zebra.
-
 GNU Zebra is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 2, or (at your option) any
 later version.
-
 GNU Zebra is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
-
 You should have received a copy of the GNU General Public License
 along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
@@ -38,15 +34,14 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_vty.h"
 
-/* BGP-4 Multiprotocol Extentions lead us to the complex world. We can
-   negotiate remote peer supports extentions or not. But if
+/* BGP-4 Multiprotocol Extensions lead us to the complex world. We can
+   negotiate remote peer supports extensions or not. But if
    remote-peer doesn't supports negotiation process itself.  We would
    like to do manual configuration.
-
    So there is many configurable point.  First of all we want set each
    peer whether we send capability negotiation to the peer or not.
-   Next, if we send capability to the peer we want to set my capabilty
-   inforation at each peer. */
+   Next, if we send capability to the peer we want to set my capability
+   information at each peer. */
 
 void
 bgp_capability_vty_out (struct vty *vty, struct peer *peer)
@@ -82,6 +77,10 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 	    case AFI_IP6:
 	      vty_out (vty, "AFI IPv6, ");
 	      break;
+	      /* AFI LINK STATE */
+	    case AFI_LINK_STATE:
+	      vty_out (vty, "AFI LINK STATE, ");
+	      break;
 	    default:
 	      vty_out (vty, "AFI Unknown %d, ", ntohs (mpc.afi));
 	      break;
@@ -99,6 +98,12 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 	      break;
 	    case SAFI_ENCAP:
 	      vty_out (vty, "SAFI ENCAP");
+            /* SAFI LINK STATE */
+	    case SAFI_LINK_STATE:
+	      vty_out (vty, "SAFI Link State");
+	      break;
+	    case SAFI_LINK_STATE_VPN:
+	      vty_out (vty, "SAFI Link State VPN");
 	      break;
 	    default:
 	      vty_out (vty, "SAFI Unknown %d ", mpc.safi);
@@ -132,6 +137,9 @@ bgp_afi_safi_valid_indices (afi_t afi, safi_t *safi)
     {
     case AFI_IP:
     case AFI_IP6:
+#ifdef HAVE_BGP_LS_TE
+    case AFI_LINK_STATE:     /* AFI LINK STATE */
+#endif /* BGP_LS_TE */
       switch (*safi)
 	{
 	  /* BGP MPLS-labeled VPN SAFI isn't contigious with others, remap */
@@ -141,6 +149,9 @@ bgp_afi_safi_valid_indices (afi_t afi, safi_t *safi)
 	case SAFI_MULTICAST:
 	case SAFI_MPLS_VPN:
 	case SAFI_ENCAP:
+            /* BGP MPLS-labeled VPN SAFI isn't contigious with others, remap */
+        case SAFI_LINK_STATE:
+        case SAFI_LINK_STATE_VPN:
 	  return 1;
 	}
       break;
@@ -356,7 +367,7 @@ bgp_capability_restart (struct peer *peer, struct capability_header *caphdr)
   if (BGP_DEBUG (normal, NORMAL))
     {
       zlog_debug ("%s OPEN has Graceful Restart capability", peer->host);
-      zlog_debug ("%s Peer has%srestarted. Restart Time : %d",
+      zlog_debug ("%s Peer has%s restarted. Restart Time : %d",
                   peer->host,
                   CHECK_FLAG (peer->cap, PEER_CAP_RESTART_BIT_RCV) ? " " 
                                                                    : " not ",
@@ -468,7 +479,7 @@ static const size_t cap_modsizes[] =
  * Parse given capability.
  * XXX: This is reading into a stream, but not using stream API
  *
- * @param[out] mp_capability Set to 1 on return iff one or more Multiprotocol
+ * @param[out] mp_capability Set to 1 on return if one or more Multiprotocol
  *                           capabilities were encountered.
  */
 static int
@@ -550,6 +561,7 @@ bgp_capability_parse (struct peer *peer, size_t length, int *mp_capability,
                                          BGP_NOTIFY_OPEN_UNSPECIFIC);
                   return -1;
                 }
+              break;
           /* we deliberately ignore unknown codes, see below */
           default:
             break;
@@ -839,10 +851,9 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *mp_capability)
 
   /* Check there are no common AFI/SAFIs and send Unsupported Capability
      error. */
-  if (*mp_capability &&
-      ! CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
+  if (*mp_capability && ! CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
     {
-      if (! peer->afc_nego[AFI_IP][SAFI_UNICAST] 
+      if (! peer->afc_nego[AFI_IP][SAFI_UNICAST]
 	  && ! peer->afc_nego[AFI_IP][SAFI_MULTICAST]
 	  && ! peer->afc_nego[AFI_IP][SAFI_MPLS_VPN]
 	  && ! peer->afc_nego[AFI_IP][SAFI_ENCAP]
@@ -850,6 +861,8 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *mp_capability)
 	  && ! peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
 	  && ! peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
 	  && ! peer->afc_nego[AFI_IP6][SAFI_ENCAP])
+	  && ! peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE]
+	  && ! peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE_VPN])
 	{
 	  plog_err (peer->log, "%s [Error] Configured AFI/SAFIs do not "
 		    "overlap with received MP capabilities",
@@ -1054,6 +1067,34 @@ bgp_open_capability (struct stream *s, struct peer *peer)
       stream_putc (s, 0);
       stream_putc (s, SAFI_ENCAP);
     }
+
+#ifdef HAVE_BGP_LS_TE
+  /* LINK State  */
+    if (peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE])
+      {
+        peer->afc_adv[AFI_LINK_STATE][SAFI_LINK_STATE] = 1;
+        stream_putc (s, BGP_OPEN_OPT_CAP);
+        stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+        stream_putc (s, CAPABILITY_CODE_MP);
+        stream_putc (s, CAPABILITY_CODE_MP_LEN);
+        stream_putw (s, AFI_LINK_STATE);
+        stream_putc (s, 0);
+        stream_putc (s, SAFI_LINK_STATE);
+      }
+
+    /* Link State VPN */
+        if (peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE_VPN])
+         {
+          peer->afc_adv[AFI_LINK_STATE][SAFI_LINK_STATE_VPN] = 1;
+          stream_putc (s, BGP_OPEN_OPT_CAP);
+          stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+          stream_putc (s, CAPABILITY_CODE_MP);
+          stream_putc (s, CAPABILITY_CODE_MP_LEN);
+          stream_putw (s, AFI_LINK_STATE);
+          stream_putc (s, 0);
+          stream_putc (s, SAFI_LINK_STATE_VPN);
+          }
+#endif /*HAVE_BGP_LS*/
 
   /* Route refresh. */
   SET_FLAG (peer->cap, PEER_CAP_REFRESH_ADV);

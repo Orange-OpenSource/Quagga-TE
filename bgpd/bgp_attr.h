@@ -120,6 +120,12 @@ struct attr
   
   /* Path origin attribute */
   u_char origin;
+
+  /* BGP Link-State attributes*/
+//#ifdef HAVE_BGP_LS_TE
+ struct mp_bgpls_nlri *mp_bgpls_nlri; /*  BGP LS extension NLRI  */
+ struct ls_bgpls *link_state_attr; /*  BGP Link State attribute  */
+//#endif /* HAVE_BGP_LS_TE */
 };
 
 /* Router Reflector related structure. */
@@ -197,10 +203,11 @@ struct bgp_attr_parser_args {
   u_int8_t flags;
   u_char *startp;   
 };
-extern int bgp_mp_reach_parse (struct bgp_attr_parser_args *args, 
-			       struct bgp_nlri *);
-extern int bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
-                                 struct bgp_nlri *);
+
+
+extern void bgp_put_link_state(struct stream *s,struct attr *attr);
+extern int mp_reach_value(struct bgp_attr_parser_args *args ,struct bgp_nlri *mp_update);
+extern int link_state_value(struct stream *s,struct peer *peer,u_int16_t l_type,u_int16_t l_length);
 
 extern struct bgp_attr_encap_subtlv *
 encap_tlv_dup(struct bgp_attr_encap_subtlv *orig);
@@ -218,7 +225,7 @@ extern size_t bgp_packet_mpattr_start(struct stream *s, afi_t afi, safi_t safi,
 				      struct attr *attr);
 extern void bgp_packet_mpattr_prefix(struct stream *s, afi_t afi, safi_t safi,
 				     struct prefix *p, struct prefix_rd *prd,
-				     u_char *tag);
+				     u_char *tag, struct attr *attr);
 extern size_t bgp_packet_mpattr_prefix_size(afi_t afi, safi_t safi,
                                             struct prefix *p);
 extern void bgp_packet_mpattr_end(struct stream *s, size_t sizep);
@@ -227,7 +234,7 @@ extern size_t bgp_packet_mpunreach_start (struct stream *s, afi_t afi,
 					  safi_t safi);
 extern void bgp_packet_mpunreach_prefix (struct stream *s, struct prefix *p,
 			     afi_t afi, safi_t safi, struct prefix_rd *prd,
-			     u_char *tag);
+			     u_char *tag,struct attr *attr);
 extern void bgp_packet_mpunreach_end (struct stream *s, size_t attrlen_pnt);
 
 #endif /* _QUAGGA_BGP_ATTR_H */

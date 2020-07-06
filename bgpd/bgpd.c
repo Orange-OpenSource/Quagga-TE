@@ -37,6 +37,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "linklist.h"
 #include "workqueue.h"
 #include "table.h"
+#include "lsa.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
@@ -61,6 +62,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_mpath.h"
+#include "bgpd/bgp_zbusclient.h"
+#include "bgpd/bgp_ls_ospf.h"
 #ifdef HAVE_SNMP
 #include "bgpd/bgp_snmp.h"
 #endif /* HAVE_SNMP */
@@ -520,7 +523,9 @@ peer_rsclient_active (struct peer *peer)
 {
   int i;
   int j;
-
+/*
+ * TODO:need to be optimized because of BGP LS
+ */
   for (i=AFI_IP; i < AFI_MAX; i++)
     for (j=SAFI_UNICAST; j < SAFI_MAX; j++)
       if (CHECK_FLAG(peer->af_flags[i][j], PEER_FLAG_RSERVER_CLIENT)
@@ -830,6 +835,9 @@ peer_new (struct bgp *bgp)
   peer->bgp = bgp;
   peer = peer_lock (peer); /* initial reference */
   bgp_lock (bgp);
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
 
   /* Set default flags.  */
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
@@ -986,6 +994,10 @@ peer_as_change (struct peer *peer, as_t as)
 		  PEER_FLAG_REFLECTOR_CLIENT);
       UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_ENCAP],
 		  PEER_FLAG_REFLECTOR_CLIENT);
+      UNSET_FLAG (peer->af_flags[AFI_LINK_STATE][SAFI_LINK_STATE],
+      		  PEER_FLAG_REFLECTOR_CLIENT);
+      UNSET_FLAG (peer->af_flags[AFI_LINK_STATE][SAFI_LINK_STATE_VPN],
+      		  PEER_FLAG_REFLECTOR_CLIENT);
     }
 
   /* local-as reset */
@@ -1187,6 +1199,9 @@ peer_nsf_stop (struct peer *peer)
 
   UNSET_FLAG (peer->sflags, PEER_STATUS_NSF_WAIT);
   UNSET_FLAG (peer->sflags, PEER_STATUS_NSF_MODE);
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
 
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_RESERVED_3 ; safi++)
@@ -1280,6 +1295,9 @@ peer_delete (struct peer *peer)
     {
       peer_unlock (peer); /* rsclient list reference */
       list_delete_node (bgp->rsclient, pn);
+      /*
+       * TODO: need to be optimized because of BGP LS
+       */
 
       /* Clear our own rsclient ribs. */
       for (afi = AFI_IP; afi < AFI_MAX; afi++)
@@ -1288,7 +1306,9 @@ peer_delete (struct peer *peer)
                          PEER_FLAG_RSERVER_CLIENT))
             bgp_clear_route (peer, afi, safi, BGP_CLEAR_ROUTE_MY_RSCLIENT);
     }
-
+      /*
+  	   * TODO: Nedd to be optimized beccause of BGP-LS
+  	   */
   /* Free RIB for any family in which peer is RSERVER_CLIENT, and is not
       member of a peer_group. */
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
@@ -1333,7 +1353,10 @@ peer_delete (struct peer *peer)
       sockunion_free (peer->su_remote);
       peer->su_remote = NULL;
     }
-  
+
+  /*
+   * TODO: Need to be optimized beccause of BGP-LS
+   */ 
   /* Free filter related memory.  */
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -1409,6 +1432,8 @@ peer_group_active (struct peer *peer)
       || peer->af_group[AFI_IP6][SAFI_MULTICAST]
       || peer->af_group[AFI_IP6][SAFI_MPLS_VPN]
       || peer->af_group[AFI_IP6][SAFI_ENCAP])
+      || peer->af_group[AFI_LINK_STATE][SAFI_LINK_STATE]
+      || peer->af_group[AFI_LINK_STATE][SAFI_LINK_STATE_VPN])
     return 1;
   return 0;
 }
@@ -2035,6 +2060,10 @@ bgp_create (as_t *as, const char *name)
   bgp->rsclient = list_new ();
   bgp->rsclient->cmp = (int (*)(void*, void*)) peer_cmp;
 
+  /*
+   * TODO: need to be optimized because of BGP LS
+   */
+
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
       {
@@ -2269,6 +2298,9 @@ bgp_free (struct bgp *bgp)
 
   if (bgp->name)
     free (bgp->name);
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   
   for (afi = AFI_IP; afi < AFI_MAX; afi++)
     for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -2364,6 +2396,8 @@ peer_active (struct peer *peer)
       || peer->afc[AFI_IP6][SAFI_MULTICAST]
       || peer->afc[AFI_IP6][SAFI_MPLS_VPN]
       || peer->afc[AFI_IP6][SAFI_ENCAP])
+      || peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE]
+      || peer->afc[AFI_LINK_STATE][SAFI_LINK_STATE_VPN])
     return 1;
   return 0;
 }
@@ -2380,6 +2414,8 @@ peer_active_nego (struct peer *peer)
       || peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
       || peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
       || peer->afc_nego[AFI_IP6][SAFI_ENCAP])
+      || peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE]
+      || peer->afc_nego[AFI_LINK_STATE][SAFI_LINK_STATE_VPN])
     return 1;
   return 0;
 }
@@ -3952,6 +3988,9 @@ peer_distribute_update (struct access_list *access)
   for (ALL_LIST_ELEMENTS (bm->bgp, mnode, mnnode, bgp))
     {
       for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
+    	  /*
+    	   * TODO:need to be optimized because of BGP LS
+    	   */
 	{
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
@@ -3970,6 +4009,9 @@ peer_distribute_update (struct access_list *access)
 	}
       for (ALL_LIST_ELEMENTS (bgp->group, node, nnode, group))
 	{
+    	  /*
+    	   * TODO:need to be optimized because of BGP LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -4112,6 +4154,9 @@ peer_prefix_list_update (struct prefix_list *plist)
     {
       for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
 	{
+    	  /*
+    	   * TODO: need to be optimized because of BGP LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -4129,6 +4174,9 @@ peer_prefix_list_update (struct prefix_list *plist)
 	}
       for (ALL_LIST_ELEMENTS (bgp->group, node, nnode, group))
 	{
+    	  /*
+    	   *TODO: need to be optimmized because of BGP-LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -4266,6 +4314,9 @@ peer_aslist_update (void)
     {
       for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
 	{
+    	  /*
+    	   * TODO:need to be optimized because of BGP LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -4283,6 +4334,9 @@ peer_aslist_update (void)
 	}
       for (ALL_LIST_ELEMENTS (bgp->group, node, nnode, group))
 	{
+    	  /*
+    	   *TODO: need to be optimmized because of BGP-LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -5128,7 +5182,15 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
 	    }
 	}
     }
-
+if ((afi == AFI_LINK_STATE && safi == SAFI_LINK_STATE))
+    {
+	/* override capability negotiation. */
+	      if (CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
+	        if (! peer_group_active (peer) ||
+		    ! CHECK_FLAG (g_peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
+		vty_out (vty, " neighbor %s override-capability%s", addr,
+			 VTY_NEWLINE);
+    }
 
   /************************************
    ****** Per AF to the neighbor ******
@@ -5324,7 +5386,17 @@ bgp_config_write_family_header (struct vty *vty, afi_t afi, safi_t safi,
           if (safi == SAFI_MULTICAST)
             vty_out (vty, " multicast");
         }
+      else if (safi == SAFI_MPLS_VPN)
+	vty_out (vty, "vpnv4 unicast");
     }
+    else if (afi == AFI_LINK_STATE)
+      {
+        vty_out (vty, "Link State");
+        if (safi == SAFI_LINK_STATE)
+          vty_out (vty, " Link State");
+        if (safi == SAFI_LINK_STATE_VPN)
+          vty_out (vty, " Link State VPN");
+      }
 
   vty_out (vty, "%s", VTY_NEWLINE);
 
@@ -5471,7 +5543,7 @@ bgp_config_write (struct vty *vty)
 	}
 
       /* BGP enforce-first-as. */
-      if (bgp_flag_check (bgp, BGP_FLAG_ENFORCE_FIRST_AS))
+      if (bgp_flag_check (bgp, BGP_FLAG_ENFORCE_FIRST_AS))bgp_vty_init
 	vty_out (vty, " bgp enforce-first-as%s", VTY_NEWLINE);
 
       /* BGP deterministic-med. */
@@ -5547,8 +5619,6 @@ bgp_config_write (struct vty *vty)
       bgp_config_write_maxpaths (vty, bgp, AFI_IP, SAFI_UNICAST, &write);
 
       /* Distance configuration. */
-      bgp_config_write_distance (vty, bgp);
-      
       /* No auto-summary */
       if (bgp_option_check (BGP_OPT_CONFIG_CISCO))
 	vty_out (vty, " no auto-summary%s", VTY_NEWLINE);
@@ -5575,6 +5645,12 @@ bgp_config_write (struct vty *vty)
       write += bgp_config_write_family (vty, bgp, AFI_IP6, SAFI_ENCAP);
 
       vty_out (vty, " exit%s", VTY_NEWLINE);
+
+      /* IP AFI/SAFI	LINK STATE  configuration.  */
+       write += bgp_config_write_family (vty, bgp, AFI_LINK_STATE, SAFI_LINK_STATE);
+
+       /* IP AFI/SAFI	LINK STATE  configuration.  */
+      write += bgp_config_write_family (vty, bgp, AFI_LINK_STATE, SAFI_LINK_STATE_VPN);
 
       write++;
     }
@@ -5614,6 +5690,11 @@ bgp_init (void)
   bgp_scan_init ();
   bgp_mplsvpn_init ();
   bgp_encap_init ();
+
+#ifdef HAVE_BGP_LS_TE
+  bgp_link_state_init ();
+  bgp_mp_reach_init ();
+#endif /* HAVE_BGP_LS_TE */
 
   /* Access list initialize. */
   access_list_init ();

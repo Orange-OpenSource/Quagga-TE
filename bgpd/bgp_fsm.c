@@ -199,6 +199,7 @@ bgp_timer_set (struct peer *peer)
       BGP_TIMER_OFF (peer->t_gr_restart);
       BGP_TIMER_OFF (peer->t_gr_stale);
       BGP_TIMER_OFF (peer->t_pmax_restart);
+      break;
     case Clearing:
       BGP_TIMER_OFF (peer->t_start);
       BGP_TIMER_OFF (peer->t_connect);
@@ -349,6 +350,9 @@ bgp_graceful_restart_timer_expire (struct thread *thread)
   peer->t_gr_restart = NULL;
 
   /* NSF delete stale route */
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_RESERVED_3 ; safi++)
       if (peer->nsf[afi][safi])
@@ -382,6 +386,9 @@ bgp_graceful_stale_timer_expire (struct thread *thread)
     zlog_debug ("%s graceful restart stalepath timer expired", peer->host);
 
   /* NSF delete stale route */
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_RESERVED_3 ; safi++)
       if (peer->nsf[afi][safi])
@@ -490,7 +497,9 @@ bgp_stop (struct peer *peer)
       else
 	{
 	  UNSET_FLAG (peer->sflags, PEER_STATUS_NSF_MODE);
-
+	    /*
+	     * TODO:need to be optimized because of BGP LS
+	     */
 	  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
 	    for (safi = SAFI_UNICAST ; safi < SAFI_RESERVED_3 ; safi++)
 	      peer->nsf[afi][safi] = 0;
@@ -535,7 +544,9 @@ bgp_stop (struct peer *peer)
       close (peer->fd);
       peer->fd = -1;
     }
-
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
       {
@@ -581,6 +592,8 @@ bgp_stop (struct peer *peer)
   peer->pcount[AFI_IP][SAFI_MPLS_VPN] = 0;
   peer->pcount[AFI_IP6][SAFI_UNICAST] = 0;
   peer->pcount[AFI_IP6][SAFI_MULTICAST] = 0;
+  peer->pcount[AFI_LINK_STATE][SAFI_LINK_STATE] = 0;
+  peer->pcount[AFI_LINK_STATE][SAFI_LINK_STATE_VPN] = 0;
 #endif /* 0 */
 
   return 0;
@@ -831,6 +844,9 @@ bgp_establish (struct peer *peer)
 
   /* graceful restart */
   UNSET_FLAG (peer->sflags, PEER_STATUS_NSF_WAIT);
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_RESERVED_3 ; safi++)
       {
@@ -881,6 +897,9 @@ bgp_establish (struct peer *peer)
   peer->uptime = bgp_clock ();
 
   /* Send route-refresh when ORF is enabled */
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
       if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV))
@@ -897,6 +916,9 @@ bgp_establish (struct peer *peer)
     bgp_keepalive_send (peer);
 
   /* First update is deferred until ORF or ROUTE-REFRESH is received */
+  /*
+   * TODO:need to be optimized because of BGP LS
+   */
   for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
     for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
       if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV))

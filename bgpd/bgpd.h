@@ -86,6 +86,9 @@ struct bgp
   /* BGP route-server-clients. */
   struct list *rsclient;
 
+  /*Add a traffic engineering database */
+  struct bgp_lsdb *lsdb ;
+
   /* BGP configuration.  */
   u_int16_t config;
 #define BGP_CONFIG_ROUTER_ID              (1 << 0)
@@ -218,10 +221,10 @@ struct bgp_rd
 };
 
 #define RMAP_IN           0
-#define RMAP_OUT        1
-#define RMAP_IMPORT   2
-#define RMAP_EXPORT   3
-#define RMAP_MAX        4
+#define RMAP_OUT          1
+#define RMAP_IMPORT       2
+#define RMAP_EXPORT       3
+#define RMAP_MAX          4
 
 /* BGP filter structure. */
 struct bgp_filter
@@ -598,7 +601,7 @@ struct bgp_nlri
 #define BGP_VERSION_4		                 4
 
 /* Default BGP port number.  */
-#define BGP_PORT_DEFAULT                       179
+#define BGP_PORT_DEFAULT                   179
 
 /* BGP message header and packet size.  */
 #define BGP_MARKER_SIZE		                16
@@ -647,6 +650,7 @@ struct bgp_nlri
 #define BGP_ATTR_AS4_AGGREGATOR                 18
 #define BGP_ATTR_AS_PATHLIMIT                   21
 #define BGP_ATTR_ENCAP                          23
+#define BGP_ATTR_LINK_STATE                     29
 
 /* BGP update origin.  */
 #define BGP_ORIGIN_IGP                           0
@@ -989,5 +993,6 @@ extern int peer_clear_soft (struct peer *, afi_t, safi_t, enum bgp_clear_type);
 
 extern int peer_ttl_security_hops_set (struct peer *, int);
 extern int peer_ttl_security_hops_unset (struct peer *);
+
 
 #endif /* _QUAGGA_BGPD_H */

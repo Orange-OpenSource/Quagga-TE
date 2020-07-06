@@ -42,6 +42,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "table.h"
 #include "bgp_encap_types.h"
 
+#ifdef HAVE_BGP_LS
+#include "bgpd/bgp_lsdb.h"
+#include "bgpd/bgp_ls.h"
+#endif /*  HAVE_BGP_LS  */
+
 /* Attribute strings for logging. */
 static const struct message attr_str [] = 
 {
@@ -65,6 +70,9 @@ static const struct message attr_str [] =
   { BGP_ATTR_AS4_AGGREGATOR,   "AS4_AGGREGATOR" }, 
   { BGP_ATTR_AS_PATHLIMIT,     "AS_PATHLIMIT" },
   { BGP_ATTR_ENCAP,            "ENCAP" },
+#ifdef HAVE_BGP_LS
+  { BGP_ATTR_LINK_STATE,       "LINK_STATE" },
+#endif /*  HAVE_BGP_LS  */
 };
 static const int attr_str_max = array_size(attr_str);
 
@@ -76,6 +84,10 @@ static const struct message attr_flag_str[] =
   /* bgp_attr_flags_diagnose() relies on this bit being last in this list */
   { BGP_ATTR_FLAG_EXTLEN,   "Extended Length" },
 };
+
+#ifdef HAVE_BGP_LS
+static const size_t attr_flag_str_max = array_size(attr_flag_str);
+#endif /*  HAVE_BGP_LS  */
 
 static struct hash *cluster_hash;
 
@@ -495,6 +507,7 @@ attrhash_key_make (void *p)
       MIX(extra->weight);
       MIX(extra->mp_nexthop_global_in.s_addr);
       MIX(extra->originator_id.s_addr);
+
     }
   
   if (attr->aspath)
@@ -907,7 +920,7 @@ bgp_attr_malformed (struct bgp_attr_parser_args *args, u_char subcode,
     case BGP_ATTR_ATOMIC_AGGREGATE:
       return BGP_ATTR_PARSE_PROCEED;
     
-    /* Core attributes, particularly ones which may influence route
+    /* Core attributes, particularly ones which may  influence route
      * selection, should always cause session resets
      */
     case BGP_ATTR_ORIGIN:
@@ -921,6 +934,10 @@ bgp_attr_malformed (struct bgp_attr_parser_args *args, u_char subcode,
     case BGP_ATTR_MP_REACH_NLRI:
     case BGP_ATTR_MP_UNREACH_NLRI:
     case BGP_ATTR_EXT_COMMUNITIES:
+   /* LINK STATE ATTRIBUTE for CISCO : 29 */
+    case BGP_ATTR_LINK_STATE_CISCO:
+   /* LINK STATE ATTRIBUTE for CISCO : 99 */
+    case BGP_ATTR_LINK_STATE_JUNOS:
       bgp_notify_send_with_data (peer, BGP_NOTIFY_UPDATE_ERR, subcode,
                                  notify_datap, length);
       return BGP_ATTR_PARSE_ERROR;
@@ -997,6 +1014,8 @@ const u_int8_t attr_flags_values [] = {
   [BGP_ATTR_EXT_COMMUNITIES] =  BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS,
   [BGP_ATTR_AS4_PATH] =         BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS,
   [BGP_ATTR_AS4_AGGREGATOR] =   BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS,
+  [BGP_ATTR_LINK_STATE_CISCO] = BGP_ATTR_FLAG_OPTIONAL,
+  [BGP_ATTR_LINK_STATE_JUNOS] = BGP_ATTR_FLAG_OPTIONAL,
 };
 static const size_t attr_flags_values_max =
   sizeof (attr_flags_values) / sizeof (attr_flags_values[0]);
@@ -1604,6 +1623,70 @@ bgp_attr_cluster_list (struct bgp_attr_parser_args *args)
 
   return BGP_ATTR_PARSE_PROCEED;
 }
+/* Parsing of MP_[UN]REACH_NLRI Attribute */
+static
+ bgp_attr_parse_ret_t mp_reach_nlri_parse(struct bgp_attr_parser_args *args, struct stream *s,bgp_size_t nlri_len)
+	{
+
+struct peer *const peer = args->peer;
+const bgp_size_t length =nlri_len;
+size_t endp;
+size_t nlri_endp;
+
+/* Link State type & length */
+u_int16_t nlri_type;
+u_int16_t nlri_length;
+
+endp = stream_get_getp (s) + length;
+
+	   /* Get link state attributes to the end of attribute length. */
+while(stream_get_getp (s) < endp)
+	  {
+	/* ----------------- Type of link-state------------- */
+	nlri_type = stream_getw (s);
+
+	/*---------Length of : Type of link-state---------- */
+	nlri_length = stream_getw (s);
+
+/* size of whole attribute */
+	nlri_endp = stream_get_getp (s) + nlri_length;
+
+	while(stream_get_getp (s) < nlri_endp) {
+/* Type of Attribute : Link, Node , IPv4 & IPv6 Prefix */
+		switch (nlri_type){
+		case LINK_STATE_NODE_NLRI:
+             /* For mp_reach_nlri.c & bgp_ls_bpls_nlri.c */
+			bgp_mp_node_decode(args,s);
+		break;
+
+		case LINK_STATE_LINK_NLRI:
+             /* For mp_reach_nlri.c & bgp_ls_bpls_nlri.c */
+			bgp_mp_link_decode(args,s);
+		break;
+
+		case LINK_STATE_IPV4_TOPOLOGY_PREFIX_NLRI:
+             /* For mp_reach_nlri.c & bgp_ls_bpls_nlri.c */
+			bgp_mp_prefix_decode(args,s);
+		break;
+
+		case LINK_STATE_IPV6_TOPOLOGY_PREFIX_NLRI:
+             /* For mp_reach_nlri.c & bgp_ls_bpls_nlri.c */
+			bgp_mp_prefix_decode(args,s);
+		break;
+
+		default:
+			zlog_info ("%s: (%s) Wrong MP_NREACH_NLRI type : %d",
+						 __func__, peer->host, nlri_type);
+				      return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
+		break;
+          }
+	  }
+		    return BGP_ATTR_PARSE_PROCEED;
+	 }
+return BGP_ATTR_PARSE_PROCEED;
+}
+
+// TODO: Reapply the patch to this function
 
 /* Multiprotocol reachability information parse. */
 int
@@ -1736,7 +1819,13 @@ bgp_mp_reach_parse (struct bgp_attr_parser_args *args,
                  __func__, peer->host);
       return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
     }
-  
+
+  // TODO: Check if patch is needed
+  /* For AFI SAFI link State: we use the fonction mp_reach_nlri */
+  // if ((afi == AFI_LINK_STATE) && ((safi == SAFI_LINK_STATE) || (safi == SAFI_LINK_STATE_VPN)))
+  //  mp_reach_nlri_parse (args, s, nlri_len);
+  // else ??? To be check
+
   mp_update->afi = afi;
   mp_update->safi = safi;
   mp_update->nlri = stream_pnt (s);
@@ -1751,21 +1840,25 @@ bgp_mp_reach_parse (struct bgp_attr_parser_args *args,
 }
 
 /* Multiprotocol unreachable parse */
-int
+static int
 bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
 		      struct bgp_nlri *mp_withdraw)
 {
   struct stream *s;
   afi_t afi;
   safi_t safi;
+  // bgp_size_t nlri_len;
+  // size_t start;
   u_int16_t withdraw_len;
   struct peer *const peer = args->peer;  
   struct attr *const attr = args->attr;
   const bgp_size_t length = args->length;
 
   s = peer->ibuf;
+  start = stream_get_getp(s);
   
 #define BGP_MP_UNREACH_MIN_SIZE 3
+  // #define LEN_LEFT	(length - (stream_get_getp(s) - start))
   if ((length > STREAM_READABLE(s)) || (length <  BGP_MP_UNREACH_MIN_SIZE))
     return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
   
@@ -1778,6 +1871,17 @@ bgp_mp_unreach_parse (struct bgp_attr_parser_args *args,
   mp_withdraw->safi = safi;
   mp_withdraw->nlri = stream_pnt (s);
   mp_withdraw->length = withdraw_len;
+
+  // TODO: Check if patch already apply
+  
+/* must have nrli_len, what is left of the attribute */
+//  	  nlri_len = LEN_LEFT;
+/* For AFI SAFI link State: we use the fonction mp_reach_nlri_parse */
+//  	  if ((afi ==AFI_LINK_STATE && safi==SAFI_LINK_STATE)||(afi ==AFI_LINK_STATE && safi==SAFI_LINK_STATE_VPN))
+//	  {
+//	  mp_reach_nlri_parse(args,s,nlri_len);
+//	  }
+
 
   stream_forward_getp (s, withdraw_len);
 
@@ -1935,6 +2039,51 @@ bgp_attr_encap(
   return 0;
 }
 
+/*----BGP Link State 99 information----*/
+static bgp_attr_parse_ret_t
+bgp_attr_link_state (struct bgp_attr_parser_args *args)
+{
+  struct stream *s;
+  struct peer *const peer = args->peer;
+  struct attr *const attr = args->attr;
+  const bgp_size_t length = args->length;
+  bgp_size_t nlri_len;
+  size_t endp;
+  size_t start;
+
+  /* Set end of packet. */
+  s = BGP_INPUT(peer);
+
+  start = stream_get_getp(s);
+
+#define LEN_LEFT	(length - (stream_get_getp(s) - start))
+
+  if (length > STREAM_READABLE(s))
+    {
+      zlog_info ("%s sent invalid length, %lu", peer->host, (unsigned long)length);
+      return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
+    }
+
+  if (length < BGP_ATTR_MIN_LEN)
+    {
+      /* XXX warning: long int format, int arg (arg 5) */
+      zlog (peer->log, LOG_WARNING,
+            "%s: error BGP attribute length %lu is smaller than min len",
+             peer->host, (unsigned long) ( STREAM_PNT (BGP_INPUT (peer))));
+
+      bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR,
+                       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
+      return BGP_ATTR_PARSE_ERROR;
+    }
+  
+  /* must have nrli_len, what is left of the attribute */
+  nlri_len = LEN_LEFT;
+  //stream_forward_getp (s, nlri_len);
+  bgp_link_state_decode(args,s);
+
+  return BGP_ATTR_PARSE_PROCEED;
+}
+
 /* BGP unknown attribute treatment. */
 static bgp_attr_parse_ret_t
 bgp_attr_unknown (struct bgp_attr_parser_args *args)
@@ -2079,6 +2228,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size,
   /* Get attributes to the end of attribute length. */
   while (BGP_INPUT_PNT (peer) < endp)
     {
+
       /* Check remaining length check.*/
       if (endp - BGP_INPUT_PNT (peer) < BGP_ATTR_MIN_LEN)
 	{
@@ -2225,7 +2375,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size,
 	  ret = bgp_attr_cluster_list (&attr_args);
 	  break;
 	case BGP_ATTR_MP_REACH_NLRI:
-	  ret = bgp_mp_reach_parse (&attr_args, mp_update);
+	  ret = bgp_mp_reach_parse (&attr_args,mp_update);
 	  break;
 	case BGP_ATTR_MP_UNREACH_NLRI:
 	  ret = bgp_mp_unreach_parse (&attr_args, mp_withdraw);
@@ -2236,6 +2386,10 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size,
         case BGP_ATTR_ENCAP:
           ret = bgp_attr_encap (type, peer, length, attr, flag, startp);
           break;
+	  /* BGP Attributes LINK STATE : 29 */
+	case BGP_ATTR_LINK_STATE:
+	  ret = bgp_attr_link_state(&attr_args);
+	  break;
 	default:
 	  ret = bgp_attr_unknown (&attr_args);
 	  break;
@@ -2372,7 +2526,27 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size,
   if (attr->extra && attr->extra->transit)
     attr->extra->transit = transit_intern (attr->extra->transit);
 
-  return BGP_ATTR_PARSE_PROCEED;
+  /**         Saves attribute in LSDB      **/
+
+  struct bgp *bgp;
+  struct bgp_lsdb *bgp_lsdb;
+  struct bgp_ls *ls;
+
+  bgp = bgp_get_default ();
+  bgp_lsdb = bgp->lsdb;
+  ls = ls_attr_set (attr);
+
+  if (bgp_lsdb){
+	  bgp_lsdb_free(bgp_lsdb);
+	  bgp_lsdb = bgp_lsdb_new();
+	  bgp_lsdb_add(bgp_lsdb,ls);
+  }
+  else {
+	  bgp_lsdb = bgp_lsdb_new();
+      bgp_lsdb_add(bgp_lsdb,ls);
+  }
+
+     return BGP_ATTR_PARSE_PROCEED;
 }
 
 int stream_put_prefix (struct stream *, struct prefix *);
@@ -2422,7 +2596,7 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi,
       {
       case SAFI_UNICAST:
       case SAFI_MULTICAST:
-	{
+	  {
 	  struct attr_extra *attre = attr->extra;
 
 	  assert (attr->extra);
@@ -2462,6 +2636,20 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi,
 	break;
       }
       break;
+     case AFI_LINK_STATE:
+       switch (safi)
+       {
+      case SAFI_UNICAST:
+      case SAFI_LINK_STATE:
+      case SAFI_MULTICAST:
+       {
+      struct attr_extra *attre = attr->extra;
+      assert (attr->extra);
+      stream_putc (s, attre->mp_nexthop_len);
+      if (attre->mp_nexthop_len == 4) {
+      stream_put_ipv4 (s, attr->nexthop.s_addr);
+      break;
+       }
     default:
       break;
     }
@@ -2474,18 +2662,79 @@ bgp_packet_mpattr_start (struct stream *s, afi_t afi, safi_t safi,
 void
 bgp_packet_mpattr_prefix (struct stream *s, afi_t afi, safi_t safi,
 			  struct prefix *p, struct prefix_rd *prd,
-			  u_char *tag)
+			  u_char *tag,struct attr *attr)
 {
-  if (safi == SAFI_MPLS_VPN)
+	 struct attr_extra *attre = attr->extra;
+  switch (safi)
     {
+    case SAFI_MPLS_VPN:
       /* Tag, RD, Prefix write. */
       stream_putc (s, p->prefixlen + 88);
       stream_put (s, tag, 3);
       stream_put (s, prd->val, 8);
       stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
+      break;
+    case SAFI_LINK_STATE || SAFI_LINK_STATE_VPN:
+     /*BGP link state information */
+     /*Make a MP reach_nlri attribute*/
+#ifdef HAVE_BGP_LS_TE
+    stream_put (s, &attr->mp_bgpls_nlri->header.nlri_type, 2);
+    stream_put (s, &attr->mp_bgpls_nlri->header.nlri_length, 2);
+    if (SAFI_LINK_STATE_VPN) {
+     stream_put (s, prd->val, 4);
     }
-  else
-    stream_put_prefix (s, p);
+    stream_put (s, &attr->mp_bgpls_nlri->ext_hdr.proto_id,1);
+    stream_put (s, &attr->mp_bgpls_nlri->ext_hdr.nlri_identifier,8);
+    stream_put (s, &attr->mp_bgpls_nlri->tlvcp.header.nlri_type,2);
+    stream_put (s, &attr->mp_bgpls_nlri->tlvcp.header.nlri_length,2);
+    switch(attr->mp_bgpls_nlri->tlvcp.header.nlri_type){
+       /******************************************************/
+    case BGP_NLRI_TLV_LOCAL_NODE_DESCRIPTORS :
+         stream_put (s, &attr->mp_bgpls_nlri->local_node->value,attr->mp_bgpls_nlri->local_node->header.nlri_length);
+         break;
+    case BGP_NLRI_TLV_REMOTE_NODE_DESCRIPTORS :
+    	 stream_put (s, &attr->mp_bgpls_nlri->remote_node->value,attr->mp_bgpls_nlri->local_node->header.nlri_length);
+    	 break;
+    case BGP_NLRI_TLV_LINK_LOCAL_REMOTE_IDENTIFIERS:
+    	 stream_put (s, &attr->mp_bgpls_nlri->llri.local,4);
+    	 stream_put (s, &attr->mp_bgpls_nlri->llri.remote,4);
+    	 break;
+    case BGP_NLRI_TLV_IPV4_INTERFACE_ADDRESS:
+    	 stream_put (s, &attr->mp_bgpls_nlri->i4ia.value,BGP_NLRI_TLV_LEN_IPV4_INTERFACE_ADDRESS);
+    	 break;
+    case BGP_NLRI_TLV_IPV4_NEIGHBOR_ADDRESS:
+    	 stream_put (s, &attr->mp_bgpls_nlri->i4na.value,BGP_NLRI_TLV_LEN_IPV4_NEIGHBOR_ADDRESS);
+    	 break;
+    case BGP_NLRI_TLV_IPV6_INTERFACE_ADDRESS:
+#ifdef HAVE_IPV6
+    	 stream_put (s, &attr->mp_bgpls_nlri->i6ia.value,BGP_NLRI_TLV_LEN_IPV6_INTERFACE_ADDRESS);
+#endif /* HAVE_IPV6 */
+    	 break;
+    case BGP_NLRI_TLV_IPV6_NEIGHBOR_ADDRESS :
+#ifdef HAVE_IPV6
+    	stream_put (s, &attr->mp_bgpls_nlri->i6na.value,BGP_NLRI_TLV_LEN_IPV6_NEIGHBOR_ADDRESS);
+#endif /* HAVE_IPV6 */
+    	break;
+    case BGP_NLRI_TLV_MULTI_TOPOLOGY_ID:
+    	 stream_put (s, &attr->mp_bgpls_nlri->mid->value,attr->mp_bgpls_nlri->mid->header.nlri_length);
+    	 break;
+    case BGP_NLRI_TLV_OSPF_ROUTE_TYPE:
+    	 stream_put (s, &attr->mp_bgpls_nlri->ort.value,BGP_NLRI_TLV_LEN_OSPF_TYPE_ROUTE);
+    	 break;
+    case BGP_NLRI_TLV_IP_REACHABILITY_INFORMATION:
+    	 stream_put (s, &attr->mp_bgpls_nlri->ipreach->prefix,1);
+    	 stream_put (s, &attr->mp_bgpls_nlri->ipreach->value,(attr->mp_bgpls_nlri->ipreach->header.nlri_length-1));
+    	break;
+    default:
+    	break;
+    }
+    	break;
+#endif /*  HAVE_BGP_LS_TE  */
+    default:
+      /* Prefix write. */
+      stream_put_prefix (s, p);
+      break;
+    }
 }
 
 size_t
@@ -2587,11 +2836,15 @@ void
 bgp_packet_mpattr_end (struct stream *s, size_t sizep)
 {
   /* Set MP attribute length. Don't count the (2) bytes used to encode
-     the attr length */
+   * the attr length
+   */
   stream_putw_at (s, sizep, (stream_get_endp (s) - sizep) - 2);
 }
+/**
+ * Du travail pour mp_reach_nlri & link_state_nlri
+ * 01/06/2015: Encode All attributes expect MP_REACH_NLRI so nothing to do
+Make attribute packet. */
 
-/* Make attribute packet. */
 bgp_size_t
 bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
 		      struct stream *s, struct attr *attr,
@@ -2600,6 +2853,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
 {
   size_t cp;
   size_t aspath_sizep;
+  size_t linkstate_sizep;
   struct aspath *aspath;
   int send_as4_path = 0;
   int send_as4_aggregator = 0;
@@ -2615,7 +2869,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
     {
       size_t mpattrlen_pos = 0;
       mpattrlen_pos = bgp_packet_mpattr_start(s, afi, safi, attr);
-      bgp_packet_mpattr_prefix(s, afi, safi, p, prd, tag);
+      bgp_packet_mpattr_prefix(s, afi, safi, p, prd, tag,attr);
       bgp_packet_mpattr_end(s, mpattrlen_pos);
     }
 
@@ -2687,8 +2941,7 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
       send_as4_path = 1; /* we'll do this later, at the correct place */
   
   /* Nexthop attribute. */
-  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP) && afi == AFI_IP &&
-    safi ==  SAFI_UNICAST)   /* only write NH attr for unicast safi */
+  if (attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP) && afi == AFI_IP)
     {
       stream_putc (s, BGP_ATTR_FLAG_TRANS);
       stream_putc (s, BGP_ATTR_NEXT_HOP);
@@ -2948,6 +3201,16 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
 	bgp_packet_mpattr_tea(bgp, peer, s, attr, BGP_ATTR_ENCAP);
     }
 
+#ifdef HAVE_BGP_LS_TE
+   if(attr->extra && attr->link_state_attr){
+	   stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS);
+	   stream_putc (s, BGP_ATTR_LINK_STATE_JUNOS);
+	   linkstate_sizep = stream_get_endp (s);
+	   stream_putc (s, linkstate_sizep);
+	   bgp_put_link_state(s,attr);
+       }
+#endif /*HAVE_BGP_LS_TE*/
+
   /* Unknown transit attribute. */
   if (attr->extra && attr->extra->transit)
     stream_put (s, attr->extra->transit->val, attr->extra->transit->length);
@@ -2976,9 +3239,74 @@ bgp_packet_mpunreach_start (struct stream *s, afi_t afi, safi_t safi)
 void
 bgp_packet_mpunreach_prefix (struct stream *s, struct prefix *p,
 			     afi_t afi, safi_t safi, struct prefix_rd *prd,
-			     u_char *tag)
+			     u_char *tag,struct attr *attr)
 {
-  bgp_packet_mpattr_prefix (s, afi, safi, p, prd, tag);
+	struct attr_extra *attre=attr->extra;
+  if (safi == SAFI_MPLS_VPN)
+    {
+      stream_putc (s, p->prefixlen + 88);
+      stream_put (s, tag, 3);
+      stream_put (s, prd->val, 8);
+      stream_put (s, &p->u.prefix, PSIZE (p->prefixlen));
+    }
+    /* Link state attributes */
+#ifdef HAVE_BGP_LS_TE
+  if(safi == SAFI_LINK_STATE || safi == SAFI_LINK_STATE_VPN)
+   {
+	  stream_put (s, &attr->mp_bgpls_nlri->header.nlri_type, 2);
+	      stream_put (s, &attr->mp_bgpls_nlri->header.nlri_length, 2);
+	      if (SAFI_LINK_STATE_VPN) {
+	       stream_put (s, prd->val, 4);
+	      }
+	      stream_put (s, &attr->mp_bgpls_nlri->ext_hdr.proto_id,1);
+	      stream_put (s, &attr->mp_bgpls_nlri->ext_hdr.nlri_identifier,8);
+	      stream_put (s, &attr->mp_bgpls_nlri->tlvcp.header.nlri_type,2);
+	      stream_put (s, &attr->mp_bgpls_nlri->tlvcp.header.nlri_length,2);
+	      switch(attr->mp_bgpls_nlri->tlvcp.header.nlri_type){
+	         /******************************************************/
+	      case BGP_NLRI_TLV_LOCAL_NODE_DESCRIPTORS :
+	           stream_put (s, &attr->mp_bgpls_nlri->local_node->value,attr->mp_bgpls_nlri->local_node->header.nlri_length);
+	           break;
+	      case BGP_NLRI_TLV_REMOTE_NODE_DESCRIPTORS :
+	      	 stream_put (s, &attr->mp_bgpls_nlri->remote_node->value,attr->mp_bgpls_nlri->local_node->header.nlri_length);
+	      	 break;
+	      case BGP_NLRI_TLV_LINK_LOCAL_REMOTE_IDENTIFIERS:
+	      	 stream_put (s, &attr->mp_bgpls_nlri->llri.local,4);
+	      	 stream_put (s, &attr->mp_bgpls_nlri->llri.remote,4);
+	      	 break;
+	      case BGP_NLRI_TLV_IPV4_INTERFACE_ADDRESS:
+	      	 stream_put (s, &attr->mp_bgpls_nlri->i4ia.value,BGP_NLRI_TLV_LEN_IPV4_INTERFACE_ADDRESS);
+	      	 break;
+	      case BGP_NLRI_TLV_IPV4_NEIGHBOR_ADDRESS:
+	      	 stream_put (s, &attr->mp_bgpls_nlri->i4na.value,BGP_NLRI_TLV_LEN_IPV4_NEIGHBOR_ADDRESS);
+	      	 break;
+	      case BGP_NLRI_TLV_IPV6_INTERFACE_ADDRESS:
+	  #ifdef HAVE_IPV6
+	      	 stream_put (s, &attr->mp_bgpls_nlri->i6ia.value,BGP_NLRI_TLV_LEN_IPV6_INTERFACE_ADDRESS);
+	  #endif /* HAVE_IPV6 */
+	      	 break;
+	      case BGP_NLRI_TLV_IPV6_NEIGHBOR_ADDRESS :
+	  #ifdef HAVE_IPV6
+	      	stream_put (s, &attr->mp_bgpls_nlri->i6na.value,BGP_NLRI_TLV_LEN_IPV6_NEIGHBOR_ADDRESS);
+	  #endif /* HAVE_IPV6 */
+	      	break;
+	      case BGP_NLRI_TLV_MULTI_TOPOLOGY_ID:
+	      	 stream_put (s, &attr->mp_bgpls_nlri->mid->value,attr->mp_bgpls_nlri->mid->header.nlri_length);
+	      	 break;
+	      case BGP_NLRI_TLV_OSPF_ROUTE_TYPE:
+	      	 stream_put (s, &attr->mp_bgpls_nlri->ort.value,BGP_NLRI_TLV_LEN_OSPF_TYPE_ROUTE);
+	      	 break;
+	      case BGP_NLRI_TLV_IP_REACHABILITY_INFORMATION:
+	      	stream_put (s, &attr->mp_bgpls_nlri->ipreach->prefix,1);
+	      	stream_put (s, &attr->mp_bgpls_nlri->ipreach->value,(attr->mp_bgpls_nlri->ipreach->header.nlri_length-1));
+	      	break;
+	      default:
+	    	  break;
+	      }
+  }
+#endif /*HAVE_BGP_LS_TE*/
+  else
+    stream_put_prefix (s, p);
 }
 
 void
@@ -2987,6 +3315,108 @@ bgp_packet_mpunreach_end (struct stream *s, size_t attrlen_pnt)
   bgp_packet_mpattr_end (s, attrlen_pnt);
 }
 
+/*BGP link state information */
+	 /*LInk state_nlri*/
+void
+bgp_put_link_state(struct stream *s,struct attr *attr) {
+#ifdef HAVE_BGP_LS_TE
+	int i=1;
+	int n;
+	    struct attr_extra *attre = attr->extra;
+	    stream_put (s, &attr->link_state_attr->header.nlri_type, 2);
+	    stream_put (s, &attr->link_state_attr->header.nlri_length, 2);
+	    stream_put (s, &attr->link_state_attr->header.nlri_type,2);
+	    stream_put (s, &attr->link_state_attr->header.nlri_length,2);
+	    switch(attr->link_state_attr->header.nlri_type) {
+        /******************************************************/
+	       case BGP_NLRI_TLV_NODE_FLAG_BITS :
+	    	     stream_put (s, &attr->link_state_attr->nfb.value,BGP_NLRI_TLV_LEN_NODE_FLAG_BITS);
+	             break;
+	        case BGP_NLRI_TLV_OPAQUE_NODE_PROPERTIES:
+	        	 stream_put (s, &attr->link_state_attr->onp->value,attr->link_state_attr->onp->header.nlri_length);
+	        	 break;
+	        case BGP_NLRI_TLV_NODE_NAME:
+	        	 stream_put (s, &attr->link_state_attr->nn->value,attr->link_state_attr->nn->header.nlri_length);
+	        	 break;
+	        case BGP_NLRI_TLV_IS_IS_AREA_IDENTIFIER:
+	        	 stream_put (s, &attr->link_state_attr->iiai->value,attr->link_state_attr->iiai->header.nlri_length);
+	        	 break;
+	        case BGP_NLRI_TLV_IPV4_ROUTER_ID_OF_LOCAL_NODE:
+	        	 stream_put (s, &attr->link_state_attr->i4ridofln.value,BGP_NLRI_TLV_LEN_IPV4_ROUTER_ID_OF_LOCAL_NODE);
+	        	 break;
+	        case BGP_NLRI_TLV_IPV6_ROUTER_ID_OF_LOCAL_NODE:
+#ifdef HAVE_IPV6
+	        	 stream_put (s, &attr->link_state_attr->i6ridofln.value,BGP_NLRI_TLV_LEN_IPV6_ROUTER_ID_OF_LOCAL_NODE);
+#endif /*HAVE_IPV6*/
+	        	 break;
+	        case BGP_NLRI_TLV_IPV4_ROUTER_ID_OF_REMOTE_NODE :
+	        	 stream_put (s, &attr->link_state_attr->i4ridofrn.value,BGP_NLRI_TLV_LEN_IPV4_ROUTER_ID_OF_REMOTE_NODE);
+	        	break;
+	        case BGP_NLRI_TLV_IPV6_ROUTER_ID_OF_REMOTE_NODE:
+#ifdef HAVE_IPV6
+	        	 stream_put (s, &attr->link_state_attr->i6ridofrn.value,BGP_NLRI_TLV_LEN_IPV6_ROUTER_ID_OF_REMOTE_NODE);
+#endif /*HAVE_IPV6*/
+	        	 break;
+	        case BGP_NLRI_TLV_ADMINISTRATIVE_GROUP_COLOR:
+	        	 stream_put (s, &attr->link_state_attr->agc.value,BGP_NLRI_TLV_LEN_ADMINISTRATIVE_GROUP_COLOR);
+	        	 break;
+	        case BGP_NLRI_TLV_MAX_LINK_BANDWIDTH:
+	        	 stream_put (s, &attr->link_state_attr->mlb.value,BGP_NLRI_TLV_LEN_MAX_LINK_BANDWIDTH);
+	        	break;
+	        case BGP_NLRI_TLV_MAX_RESERVABLE_LINK_BANDWIDTH:
+	        	 stream_put (s, &attr->link_state_attr->mrlb.value,BGP_NLRI_TLV_LEN_MAX_RESERVABLE_LINK_BANDWIDTH);
+				break;
+			case BGP_NLRI_TLV_UNRESERVED_BANDWIDTH :
+
+			      n = (attr->link_state_attr->urb.header.nlri_length) / 8;
+								for (i=1;i<=n;i++) {
+				stream_put (s, &attr->link_state_attr->urb.value[i],1);
+										    	  }
+				break;
+			case BGP_NLRI_TLV_TE_DEFAULT_METRIC:
+				 stream_put (s, &attr->link_state_attr->tdm.value,BGP_NLRI_TLV_LEN_TE_DEFAULT_METRIC);
+				break;
+			case BGP_NLRI_TLV_LINK_PROTECTION_TYPE :
+				 stream_put (s, &attr->link_state_attr->lpt.value,BGP_NLRI_TLV_LEN_LINK_PROTECTION_TYPE);
+				break;
+			case BGP_NLRI_TLV_MPLS_PROTOCOL_MASK :
+				 stream_put (s, &attr->link_state_attr->mpm.value,BGP_NLRI_TLV_LEN_MPLS_PROTOCOL_MASK);
+				break;
+			case BGP_NLRI_TLV_IGP_METRIC:
+				 stream_put (s, &attr->link_state_attr->igpm->value,BGP_NLRI_TLV_LEN_METRIC);
+				break;
+			case BGP_NLRI_TLV_SHARED_RISK_LINK_GROUP:
+				 stream_put (s, &attr->link_state_attr->srlg->value,attr->link_state_attr->srlg->header.nlri_length);
+				break;
+			case BGP_NLRI_TLV_OPAQUE_LINK_ATTRIBUTE:
+				 stream_put (s, &attr->link_state_attr->ola->value,attr->link_state_attr->ola->header.nlri_length);
+				break;
+			case BGP_NLRI_TLV_LINK_NAME_ATTRIBUTE:
+				 stream_put (s, &attr->link_state_attr->lna->value,attr->link_state_attr->lna->header.nlri_length);
+				break;
+			case BGP_NLRI_TLV_IGP_FLAGS :
+				 stream_put (s, &attr->link_state_attr->ifl.value,BGP_NLRI_TLV_LEN_IGP_FLAGS);
+				break;
+	       case BGP_NLRI_TLV_ROUTE_TAG:
+	    	   stream_put (s, &attr->link_state_attr->rt->value,attr->link_state_attr->rt->header.nlri_length);
+				break;
+		   case BGP_NLRI_TLV_EXTENDED_TAG :
+			   stream_put (s, &attr->link_state_attr->et->value,attr->link_state_attr->et->header.nlri_length);
+				break;
+		   case BGP_NLRI_TLV_PREFIX_METRIC :
+			   stream_put (s, &attr->link_state_attr->pm.value,BGP_NLRI_TLV_LEN_PREFIX_METRIC);
+				break;
+		  case BGP_NLRI_TLV_OSPF_FORWARDING_ADDRESS:
+			  stream_put (s, &attr->link_state_attr->ofa.value,attr->link_state_attr->ofa.header.nlri_length);
+				break;
+	     case BGP_NLRI_TLV_OPAQUE_PREFIX_ATTRIBUTE:
+	    	 stream_put (s, &attr->link_state_attr->opa->value,attr->link_state_attr->opa->header.nlri_length);
+				break;
+	        default:
+	        	break;
+	    }
+#endif /*HAVE_BGP_LS_TE*/
+}
 /* Initialization of attribute. */
 void
 bgp_attr_init (void)
@@ -3144,3 +3574,4 @@ bgp_dump_routes_attr (struct stream *s, struct attr *attr,
   len = stream_get_endp (s) - cp - 2;
   stream_putw_at (s, cp, len);
 }
+

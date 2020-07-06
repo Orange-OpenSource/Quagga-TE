@@ -79,6 +79,7 @@ community_entry_free (struct community_entry *entry)
         XFREE (MTYPE_COMMUNITY_LIST_CONFIG, entry->config);
       if (entry->reg)
         bgp_regex_free (entry->reg);
+      break;
     default:
       break;
     }

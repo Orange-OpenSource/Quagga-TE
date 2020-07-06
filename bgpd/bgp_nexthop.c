@@ -435,6 +435,13 @@ bgp_scan (afi_t afi, safi_t safi)
 	bgp_maximum_prefix_overflow (peer, afi, SAFI_MULTICAST, 1);
       if (peer->afc[afi][SAFI_MPLS_VPN])
 	bgp_maximum_prefix_overflow (peer, afi, SAFI_MPLS_VPN, 1);
+      if (peer->afc[afi][SAFI_LINK_STATE])
+      	bgp_maximum_prefix_overflow (peer, afi, SAFI_LINK_STATE, 1);
+      if (peer->afc[afi][SAFI_LINK_STATE_VPN])
+      	bgp_maximum_prefix_overflow (peer, afi, SAFI_LINK_STATE_VPN, 1);
+      /*
+       *
+       * */
     }
 
   for (rn = bgp_table_top (bgp->rib[afi][SAFI_UNICAST]); rn;
@@ -501,8 +508,10 @@ bgp_scan (afi_t afi, safi_t safi)
     {
       if (afi == AFI_IP)
 	zlog_debug ("scanning IPv4 Unicast routing tables");
-      else if (afi == AFI_IP6)
+      if (afi == AFI_IP6)
 	zlog_debug ("scanning IPv6 Unicast routing tables");
+      if (afi == AFI_LINK_STATE)
+      	zlog_debug ("scanning Link State routing tables");
     }
 
   /* Reevaluate default-originate route-maps and announce/withdraw
@@ -1409,6 +1418,13 @@ bgp_scan_init (void)
   bgp_nexthop_cache_table[AFI_IP6] = cache1_table[AFI_IP6];
   bgp_connected_table[AFI_IP6] = bgp_table_init (AFI_IP6, SAFI_UNICAST);
 
+#ifdef HAVE_BGP_LS_TE
+  cache1_table[AFI_LINK_STATE] = bgp_table_init (AFI_LINK_STATE, SAFI_LINK_STATE);
+  cache2_table[AFI_LINK_STATE] = bgp_table_init (AFI_LINK_STATE, SAFI_LINK_STATE);
+  bgp_nexthop_cache_table[AFI_LINK_STATE] = cache1_table[AFI_LINK_STATE];
+  bgp_connected_table[AFI_LINK_STATE] = bgp_table_init (AFI_LINK_STATE, SAFI_LINK_STATE);
+#endif /* HAVE_IPV6 */
+
   /* Make BGP scan thread. */
   bgp_scan_thread = thread_add_timer (bm->master, bgp_scan_timer, 
                                       NULL, bgp_scan_interval);
@@ -1451,6 +1467,24 @@ bgp_scan_finish (void)
   if (bgp_connected_table[AFI_IP6])
     bgp_table_unlock (bgp_connected_table[AFI_IP6]);
   bgp_connected_table[AFI_IP6] = NULL;
+
+#ifdef HAVE_BGP_LS_TE
+  /* Only the current one needs to be reset. */
+  if (bgp_nexthop_cache_table[AFI_LINK_STATE])
+    bgp_nexthop_cache_reset (bgp_nexthop_cache_table[AFI_LINK_STATE]);
+
+  if (cache1_table[AFI_LINK_STATE])
+    bgp_table_unlock (cache1_table[AFI_LINK_STATE]);
+  cache1_table[AFI_LINK_STATE] = NULL;
+
+  if (cache2_table[AFI_LINK_STATE])
+    bgp_table_unlock (cache2_table[AFI_LINK_STATE]);
+  cache2_table[AFI_LINK_STATE] = NULL;
+
+  if (bgp_connected_table[AFI_LINK_STATE])
+    bgp_table_unlock (bgp_connected_table[AFI_LINK_STATE]);
+  bgp_connected_table[AFI_LINK_STATE] = NULL;
+#endif /* HAVE_BGP_LS_TE */
 }
 
 void

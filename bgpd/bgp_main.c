@@ -38,6 +38,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "stream.h"
 #include "vrf.h"
 #include "workqueue.h"
+// BGP-LS
+#include "config.h"
+#include "lsa.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -51,6 +54,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_zebra.h"
+#include "bgpd/bgp_ls_ospf.h"
+#include "bgpd/bgp_api.h"
+#include "bgpd/bgp_zbusclient.h"
 
 /* bgpd options, we use GNU getopt library. */
 static const struct option longopts[] = 
@@ -60,7 +66,7 @@ static const struct option longopts[] =
   { "pid_file",    required_argument, NULL, 'i'},
   { "socket",      required_argument, NULL, 'z'},
   { "bgp_port",    required_argument, NULL, 'p'},
-  { "listenon",    required_argument, NULL, 'l'},
+  { "listen_on",   required_argument, NULL, 'l'},
   { "vty_addr",    required_argument, NULL, 'A'},
   { "vty_port",    required_argument, NULL, 'P'},
   { "retain",      no_argument,       NULL, 'r'},
@@ -68,7 +74,7 @@ static const struct option longopts[] =
   { "user",        required_argument, NULL, 'u'},
   { "group",       required_argument, NULL, 'g'},
   { "version",     no_argument,       NULL, 'v'},
-  { "dryrun",      no_argument,       NULL, 'C'},
+  { "dry_run",     no_argument,       NULL, 'C'},
   { "help",        no_argument,       NULL, 'h'},
   { 0 }
 };
@@ -154,7 +160,7 @@ redistribution between different routing protocols.\n\n\
 -i, --pid_file     Set process identifier file name\n\
 -z, --socket       Set path of zebra socket\n\
 -p, --bgp_port     Set bgp protocol's port number\n\
--l, --listenon     Listen on specified address (implies -n)\n\
+-l, --listen_on     Listen on specified address (implies -n)\n\
 -A, --vty_addr     Set vty's bind address\n\
 -P, --vty_port     Set vty's port number\n\
 -r, --retain       When program terminates, retain added route by bgpd.\n\
@@ -162,7 +168,7 @@ redistribution between different routing protocols.\n\n\
 -u, --user         User to run as\n\
 -g, --group        Group to run as\n\
 -v, --version      Print program version\n\
--C, --dryrun       Check configuration for validity and exit\n\
+-C, --dry_run      Check configuration for validity and exit\n\
 -h, --help         Display this help and exit\n\
 \n\
 Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
@@ -334,6 +340,7 @@ bgp_exit (int status)
   exit (status);
 }
 
+
 /* Main routine of bgpd. Treatment of argument and start bgp finite
    state machine is handled at here. */
 int
@@ -410,6 +417,7 @@ main (int argc, char **argv)
 	  break;
 	case 'l':
 	  bm->address = optarg;
+	  break;
 	  /* listenon implies -n */
 	case 'n':
 	  bgp_option_set (BGP_OPT_NO_FIB);
@@ -447,6 +455,13 @@ main (int argc, char **argv)
 
   /* BGP related initialization.  */
   bgp_init ();
+/*
+  if (argc != 7)
+     {
+       usage(NULL,0);
+     }
+*/
+  bgp_zbus_init (master,&bgpd_privs);
 
   /* Parse config file. */
   vty_read_config (config_file, config_default);
@@ -461,7 +476,6 @@ main (int argc, char **argv)
       zlog_err("BGPd daemon failed: %s", strerror(errno));
       return (1);
     }
-
 
   /* Process ID file creation. */
   pid_output (pid_file);

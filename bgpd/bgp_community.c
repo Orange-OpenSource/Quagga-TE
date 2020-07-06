@@ -377,7 +377,7 @@ community_dup (struct community *com)
   return new;
 }
 
-/* Retrun string representation of communities attribute. */
+/* Return string representation of communities attribute. */
 char *
 community_str (struct community *com)
 {

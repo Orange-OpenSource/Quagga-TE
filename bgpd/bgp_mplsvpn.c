@@ -265,6 +265,7 @@ str2prefix_rd (const char *str, struct prefix_rd *prd)
       stream_putl (s, atol (p + 1));
     }
   else
+	  //extia
     {
       ret = inet_aton (half, &addr);
       if (! ret)

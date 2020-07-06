@@ -2350,6 +2350,9 @@ bgp_route_map_update (const char *unused)
     {
       for (ALL_LIST_ELEMENTS (bgp->peer, node, nnode, peer))
 	{
+    	  /*
+    	   * TODO: need to be optimized because of BGP LS
+    	   */
 	  for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	    for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	      {
@@ -2365,6 +2368,9 @@ bgp_route_map_update (const char *unused)
   /* For network route-map updates. */
   for (ALL_LIST_ELEMENTS (bm->bgp, mnode, mnnode, bgp))
     {
+    	   /*
+    	    * TODO: need to be optimized because of BGP LS
+    	    */
       for (afi = AFI_IP; afi < AFI_MAX; afi++)
 	for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++)
 	  for (bn = bgp_table_top (bgp->route[afi][safi]); bn;

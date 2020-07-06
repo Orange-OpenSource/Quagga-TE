@@ -209,6 +209,9 @@ main (int argc, char **argv)
 	  case AFI_IP6:
 	    printf ("/AFI_IP6\n");
 	    break;
+	  case AFI_LINK_STATE:
+	   printf ("/AFI_LINK_STATE\n");
+	  	break;
 	  default:
 	    printf ("/UNKNOWN %d", subtype);
 	    break;
